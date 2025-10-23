@@ -285,7 +285,6 @@ const menuItems = useMemo(() => {
   const customer = [
     { text: 'Browse Suppliers', icon: <StorefrontIcon />, path: '/browse-suppliers' },
     { text: 'Questionnaires', icon: <QuizIcon />, path: '/questionnaires' },
-    { text: 'Land Plots', icon: <LandscapeIcon />, path: '/land-plots' },
     { text: 'Products', icon: <InventoryIcon />, path: '/products' },
     { text: 'Risk Dashboard', icon: <AssessmentIcon />, path: '/risk-dashboard' },
   ];

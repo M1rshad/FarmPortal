@@ -12,47 +12,112 @@ import {
 } from '@mui/material';
 import { toast } from 'react-toastify';
 
+// services
+import {
+  saveProfile,
+  uploadFile,
+  addCertificate,
+  // getProfile, // optional if you want to load existing
+} from '../services/organizationProfileService';
+
 const OrganizationProfile = () => {
   const [tabIndex, setTabIndex] = useState(0);
+
+  // Keep backend docname once created
+  const [docname, setDocname] = useState('');
+
+  // General info (maps to your doctype fields)
   const [generalInfo, setGeneralInfo] = useState({
     organizationName: '',
-    companyAddress: '',
-    phone: '',
-    country: '',
     website: '',
+    phone: '',
+    street: '',
+    houseNumber: '',
     postalCode: '',
-    operatorType: ''
+    city: '',
+    country: '',
+    operatorType: '',  // EU/Non-EU
+    customer: '',
+    supplier: '',
   });
+
+  // Certificate
   const [certification, setCertification] = useState({
-    certificateFile: null,
+    certificateName: '',
+    evidenceType: '',
     validFrom: '',
     validTo: '',
-    evidenceType: ''
+    certificateFile: null,
   });
 
-  const handleTabChange = (event, newValue) => {
-    setTabIndex(newValue);
+  const handleTabChange = (_e, newValue) => setTabIndex(newValue);
+  const handleGeneralInfoChange = (field, value) =>
+    setGeneralInfo((prev) => ({ ...prev, [field]: value }));
+  const handleCertificationChange = (field, value) =>
+    setCertification((prev) => ({ ...prev, [field]: value }));
+  const handleFileUpload = (e) => {
+    const f = e.target.files?.[0] || null;
+    setCertification((prev) => ({ ...prev, certificateFile: f }));
   };
 
-  const handleGeneralInfoChange = (field, value) => {
-    setGeneralInfo({ ...generalInfo, [field]: value });
-  };
-
-  const handleCertificationChange = (field, value) => {
-    setCertification({ ...certification, [field]: value });
-  };
-
-  const handleFileUpload = (event) => {
-    setCertification({ ...certification, certificateFile: event.target.files[0] });
-  };
-
-  const handleSave = () => {
-    if (tabIndex === 0) {
+  // Save parent doc
+  const onSaveGeneral = async () => {
+    try {
+      const res = await saveProfile({
+        docname,
+        ...generalInfo,
+      });
+      if (res?.name) setDocname(res.name);
       toast.success('General Information saved successfully!');
-    } else {
-      toast.success('Certification details saved successfully!');
+    } catch (e) {
+      const msg =
+        e?.response?.data?._error_message ||
+        e?.response?.data?.message ||
+        'Failed to save general info';
+      toast.error(msg);
     }
   };
+
+  // Save cert: ensure parent exists -> upload file -> append child row
+  const onSaveCertificate = async () => {
+    try {
+      let ensuredDocname = docname;
+
+      if (!ensuredDocname) {
+        const res = await saveProfile({
+          docname: '',
+          ...generalInfo,
+          organizationName:
+            generalInfo.organizationName || 'Unnamed Organization',
+        });
+        ensuredDocname = res?.name || '';
+        setDocname(ensuredDocname);
+      }
+
+      const fileUrl = await uploadFile(certification.certificateFile, 1);
+
+      await addCertificate({
+        profileName: ensuredDocname,
+        certificateName: certification.certificateName,
+        evidenceType: certification.evidenceType,
+        validFrom: certification.validFrom,
+        validTo: certification.validTo,
+        fileUrl,
+      });
+
+      toast.success('Certification details saved successfully!');
+      // Optionally clear certificate fields (keep file or clear it as you like)
+      // setCertification({ certificateName: '', evidenceType: '', validFrom: '', validTo: '', certificateFile: null });
+    } catch (e) {
+      const msg =
+        e?.response?.data?._error_message ||
+        e?.response?.data?.message ||
+        'Failed to save certificate';
+      toast.error(msg);
+    }
+  };
+
+  const handleSave = () => (tabIndex === 0 ? onSaveGeneral() : onSaveCertificate());
 
   return (
     <Box>
@@ -74,15 +139,20 @@ const OrganizationProfile = () => {
                   fullWidth
                   label="Organization Name"
                   value={generalInfo.organizationName}
-                  onChange={(e) => handleGeneralInfoChange('organizationName', e.target.value)}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('organizationName', e.target.value)
+                  }
                 />
               </Grid>
-              <Grid item xs={12}>
+
+              <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Company Address"
-                  value={generalInfo.companyAddress}
-                  onChange={(e) => handleGeneralInfoChange('companyAddress', e.target.value)}
+                  label="Website"
+                  value={generalInfo.website}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('website', e.target.value)
+                  }
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -90,51 +160,105 @@ const OrganizationProfile = () => {
                   fullWidth
                   label="Phone"
                   value={generalInfo.phone}
-                  onChange={(e) => handleGeneralInfoChange('phone', e.target.value)}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('phone', e.target.value)
+                  }
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Street"
+                  value={generalInfo.street}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('street', e.target.value)
+                  }
                 />
               </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Country"
-                  value={generalInfo.country}
-                  onChange={(e) => handleGeneralInfoChange('country', e.target.value)}
+                  label="House Number"
+                  value={generalInfo.houseNumber}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('houseNumber', e.target.value)
+                  }
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Website"
-                  value={generalInfo.website}
-                  onChange={(e) => handleGeneralInfoChange('website', e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
+
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   label="Postal Code"
                   value={generalInfo.postalCode}
-                  onChange={(e) => handleGeneralInfoChange('postalCode', e.target.value)}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('postalCode', e.target.value)
+                  }
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="City"
+                  value={generalInfo.city}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('city', e.target.value)
+                  }
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Country"
+                  value={generalInfo.country}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('country', e.target.value)
+                  }
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
                 <TextField
                   select
                   fullWidth
-                  label="Operator Type"
+                  label="Type of Market Operator"
                   value={generalInfo.operatorType}
-                  onChange={(e) => handleGeneralInfoChange('operatorType', e.target.value)}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('operatorType', e.target.value)
+                  }
                 >
-                  <MenuItem value="EU Operator">EU Operator</MenuItem>
-                  <MenuItem value="Non-EU Operator">Non-EU Operator</MenuItem>
+                  <MenuItem value="EU Market Operator">EU Market Operator</MenuItem>
+                  <MenuItem value="Non-EU Market Operator">Non-EU Market Operator</MenuItem>
                 </TextField>
               </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Customer (Link)"
+                  value={generalInfo.customer}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('customer', e.target.value)
+                  }
+                  helperText="Enter Customer name (Link field)"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Supplier (Link)"
+                  value={generalInfo.supplier}
+                  onChange={(e) =>
+                    handleGeneralInfoChange('supplier', e.target.value)
+                  }
+                  helperText="Enter Supplier name (Link field)"
+                />
+              </Grid>
+
               <Grid item xs={12}>
-                <Button
-                  variant="contained"
-                  onClick={handleSave}
-                  sx={{ mt: 2 }}
-                >
+                <Button variant="contained" onClick={handleSave} sx={{ mt: 2 }}>
                   Save
                 </Button>
               </Grid>
@@ -149,18 +273,24 @@ const OrganizationProfile = () => {
                 <TextField
                   fullWidth
                   label="Certificate Name"
-                  value={certification.certificateName || ''}
-                  onChange={(e) => handleCertificationChange('certificateName', e.target.value)}
+                  value={certification.certificateName}
+                  onChange={(e) =>
+                    handleCertificationChange('certificateName', e.target.value)
+                  }
                 />
               </Grid>
+
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Type of Evidence"
+                  label="Evidence Type"
                   value={certification.evidenceType}
-                  onChange={(e) => handleCertificationChange('evidenceType', e.target.value)}
+                  onChange={(e) =>
+                    handleCertificationChange('evidenceType', e.target.value)
+                  }
                 />
               </Grid>
+
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -168,9 +298,12 @@ const OrganizationProfile = () => {
                   type="date"
                   InputLabelProps={{ shrink: true }}
                   value={certification.validFrom}
-                  onChange={(e) => handleCertificationChange('validFrom', e.target.value)}
+                  onChange={(e) =>
+                    handleCertificationChange('validFrom', e.target.value)
+                  }
                 />
               </Grid>
+
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -178,30 +311,24 @@ const OrganizationProfile = () => {
                   type="date"
                   InputLabelProps={{ shrink: true }}
                   value={certification.validTo}
-                  onChange={(e) => handleCertificationChange('validTo', e.target.value)}
+                  onChange={(e) =>
+                    handleCertificationChange('validTo', e.target.value)
+                  }
                 />
               </Grid>
-              
+
               <Grid item xs={12}>
-                <Button
-                  variant="contained"
-                  component="label"
-                  sx={{ mb: 2 }}
-                >
+                <Button variant="contained" component="label" sx={{ mb: 1 }}>
                   Upload Certificate
-                  <input
-                    type="file"
-                    hidden
-                    onChange={handleFileUpload}
-                  />
+                  <input type="file" hidden onChange={handleFileUpload} />
                 </Button>
+                <Typography variant="body2" sx={{ ml: 2, display: 'inline' }}>
+                  {certification.certificateFile?.name || 'No file selected'}
+                </Typography>
               </Grid>
+
               <Grid item xs={12}>
-                <Button
-                  variant="contained"
-                  onClick={handleSave}
-                  sx={{ mt: 2 }}
-                >
+                <Button variant="contained" onClick={handleSave} sx={{ mt: 2 }}>
                   Save
                 </Button>
               </Grid>

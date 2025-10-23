@@ -20,12 +20,16 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Requests from './pages/Requests';
-import LandPlots from './pages/LandPlots';
+// import LandPlots from './pages/LandPlots';
+import LandPlots, { DataProvider as LandPlotsProvider } from './pages/LandPlots';
+
 import Products from './pages/Products';
 import RequestDetails from './pages/RequestDetails';
 import Profile from './pages/Profile';
 import RiskDashboard from './pages/RiskDashboard';
 import OrganizationProfile from './pages/OrganizationProfile';
+import SharedPlotsMap from './pages/SharedPlotsMap';
+
 
 // Theme
 const theme = createTheme({
@@ -144,6 +148,13 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <RiskDashboard />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/shared-plots/:requestId" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <SharedPlotsMap/>
                   </Layout>
                 </ProtectedRoute>
               } />
