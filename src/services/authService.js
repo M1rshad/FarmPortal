@@ -1,77 +1,3 @@
-// // services/authService.js
-// import API from './api';
-// import qs from 'qs';
-
-// const isFrappe = (import.meta.env.VITE_BACKEND || 'frappe') === 'frappe';
-
-// export const authService = isFrappe
-//   ? {
-//       // Frappe session auth
-//       login: ({ email, password }) =>
-//         API.post(
-//           '/api/method/login',
-//           qs.stringify({ usr: email, pwd: password }),
-//           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-//         ),
-
-//       getProfile: () => API.get('/api/method/farmportal.api.me'),
-//       updateProfile: (data) => API.post('/api/method/frappe.client.set_value', data), // customize as needed
-//       logout: () => API.post('/api/method/logout'),
-
-//       // Frappe typically handles registration via invite/web form.
-//       register: async () => {
-//         return Promise.reject({ response: { data: { error: 'Registration not supported from UI' } } });
-//       },
-//     }
-//   : {
-//       // === Old JWT API (kept for compatibility) ===
-//       login: (credentials) => API.post('/auth/login', credentials),
-//       register: (userData) => API.post('/auth/register', userData),
-//       getProfile: () => API.get('/auth/profile'),
-//       updateProfile: (data) => API.put('/auth/profile', data),
-//       logout: () => Promise.resolve(),
-//     };
-// services/authService.js
-// import API from './api';
-// import qs from 'qs';
-
-// const unwrap = (data) => (data?.message ?? data ?? null);
-
-// export const authService = {
-//   // Login → then ask “who am I?” → then get app profile
-//   login: async ({ email, password }) => {
-//     await API.post(
-//       '/method/login',
-//       qs.stringify({ usr: email, pwd: password }),
-//       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-//     );
-
-//     const whoRes = await API.get('/method/frappe.auth.get_logged_user');
-//     const userId = unwrap(whoRes.data); // usually the user email/id
-
-//     const profileRes = await API.get('/method/farmportal.api.update_profile.get_profile');
-//     const profile = unwrap(profileRes.data) || {};
-
-//     return { success: !!userId, user: userId, profile };
-//   },
-
-//   logout: () => API.post('/method/logout'),
-
-//   getProfile: async () => {
-//     const { data } = await API.get('/method/farmportal.api.update_profile.get_profile');
-//     return unwrap(data) || {};
-//   },
-
-//   updateProfile: async (formData) => {
-//     const { data } = await API.post(
-//       '/method/farmportal.api.update_profile.update_profile',
-//       formData
-//     );
-//     return unwrap(data);
-//   },
-// };
-
-// services/authService.js
 // import API from './api';
 // import qs from 'qs';
 
@@ -84,25 +10,19 @@
 //       qs.stringify({ usr: email, pwd: password }),
 //       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
 //     );
-
-//     const whoRes = await API.get('/method/frappe.auth.get_logged_user');
-//     const userId = unwrap(whoRes.data);
-
-//     const profileRes = await API.get('/method/farmportal.api.update_profile.get_profile');
-//     const profile = unwrap(profileRes.data) || {};
-
-//     return { success: !!userId, user: userId, profile };
+//     // After login, load the rich me payload
+//     const me = await authService.getMe();
+//     return { success: !!me?.user?.name, user: me };
 //   },
 
 //   logout: () => API.post('/method/logout'),
 
-//   // who am I?
-//   getLoggedUser: async () => {
-//     const { data } = await API.get('/method/frappe.auth.get_logged_user');
-//     return unwrap(data);
+//   getMe: async () => {
+//     const { data } = await API.get('/method/farmportal.api.me.me');
+//     return unwrap(data); // { user, display_name, account_type, profile, ... }
 //   },
 
-//   // your app's Update Profile doc
+//   // Still available if your Profile page calls them directly
 //   getAppProfile: async () => {
 //     const { data } = await API.get('/method/farmportal.api.update_profile.get_profile');
 //     return unwrap(data) || {};
@@ -116,43 +36,116 @@
 //     return unwrap(data);
 //   },
 // };
-
-// services/authService.js
 import API from './api';
-import qs from 'qs';
 
 const unwrap = (data) => (data?.message ?? data ?? null);
 
 export const authService = {
   login: async ({ email, password }) => {
-    await API.post(
-      '/method/login',
-      qs.stringify({ usr: email, pwd: password }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-    // After login, load the rich me payload
-    const me = await authService.getMe();
-    return { success: !!me?.user?.name, user: me };
+    try {
+      console.log('[authService.login] Starting login process');
+      console.log('[authService.login] Credentials:', { usr: email, pwd: '***' });
+      
+      // Send login request as JSON (not form-encoded)
+      const loginResponse = await API.post('/method/login', {
+        usr: email,
+        pwd: password
+      });
+      
+      console.log('[authService.login] Login successful:', loginResponse.data);
+      
+      // Check if CSRF token was set
+      const csrfInCookie = document.cookie.includes('csrf_token');
+      console.log('[authService.login] CSRF token in cookies:', csrfInCookie);
+      console.log('[authService.login] Cookies:', document.cookie);
+      
+      // Small delay to ensure session is fully established
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // After login, load the user info
+      console.log('[authService.login] Fetching user info...');
+      const me = await authService.getMe();
+      
+      console.log('[authService.login] User info loaded:', me);
+      
+      return { 
+        success: !!me?.user?.name, 
+        user: me 
+      };
+      
+    } catch (error) {
+      console.error('[authService.login] Login failed:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        error: error.response?.data?.exc || error.message
+      });
+      throw error;
+    }
   },
 
-  logout: () => API.post('/method/logout'),
+  logout: async () => {
+    try {
+      console.log('[authService.logout] Logging out...');
+      const response = await API.post('/method/logout');
+      console.log('[authService.logout] Logout successful');
+      return response;
+    } catch (error) {
+      console.error('[authService.logout] Logout failed:', error.message);
+      throw error;
+    }
+  },
 
   getMe: async () => {
-    const { data } = await API.get('/method/farmportal.api.me.me');
-    return unwrap(data); // { user, display_name, account_type, profile, ... }
+    try {
+      console.log('[authService.getMe] Fetching current user info');
+      const { data } = await API.get('/method/farmportal.api.me.me');
+      const result = unwrap(data);
+      console.log('[authService.getMe] Success:', result);
+      return result;
+    } catch (error) {
+      console.error('[authService.getMe] Failed:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        error: error.response?.data?.exc || error.message
+      });
+      throw error;
+    }
   },
 
-  // Still available if your Profile page calls them directly
   getAppProfile: async () => {
-    const { data } = await API.get('/method/farmportal.api.update_profile.get_profile');
-    return unwrap(data) || {};
+    try {
+      console.log('[authService.getAppProfile] Fetching user profile');
+      const { data } = await API.get('/method/farmportal.api.update_profile.get_profile');
+      const result = unwrap(data) || {};
+      console.log('[authService.getAppProfile] Success:', result);
+      return result;
+    } catch (error) {
+      console.error('[authService.getAppProfile] Failed:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        error: error.response?.data?.exc || error.message
+      });
+      throw error;
+    }
   },
 
   updateProfile: async (formData) => {
-    const { data } = await API.post(
-      '/method/farmportal.api.update_profile.update_profile',
-      formData
-    );
-    return unwrap(data);
+    try {
+      console.log('[authService.updateProfile] Updating profile');
+      const { data } = await API.post(
+        '/method/farmportal.api.update_profile.update_profile',
+        formData
+      );
+      const result = unwrap(data);
+      console.log('[authService.updateProfile] Success:', result);
+      return result;
+    } catch (error) {
+      console.error('[authService.updateProfile] Failed:', {
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        error: error.response?.data?.exc || error.message
+      });
+      throw error;
+    }
   },
 };
