@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: '/api',          // via Vite proxy to http://localhost:8000
+  baseURL: 'https://faircodelab.frappe.cloud/api',          // via Vite proxy to http://localhost:8000
   withCredentials: true,
   timeout: 75000,
 });
