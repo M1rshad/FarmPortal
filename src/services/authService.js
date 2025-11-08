@@ -115,29 +115,26 @@ export const authService = {
   getMe: async () => {
   try {
     console.log('[authService.getMe] Fetching current user info');
-    // Test with Frappe's built-in method first
-    const { data } = await API.get('/method/frappe.auth.get_logged_user');
+    console.log('[authService.getMe] Current cookies:', document.cookie);
+    
+    // Use frappe.client.get_value which is definitely whitelisted
+    const { data } = await API.post('/method/frappe.client.get_value', {
+      doctype: 'User',
+      name: 'frappe.session.user',
+      fieldname: ['name', 'full_name', 'email']
+    });
+    
     const result = unwrap(data);
     console.log('[authService.getMe] Success:', result);
     
-    // If this works, we know session is fine and it's a whitelisting issue
     return {
-      user: {
-        name: result,
-        full_name: result,
-        email: result,
-        roles: []
-      }
+      user: result
     };
   } catch (error) {
-    console.error('[authService.getMe] Failed:', {
-      status: error.response?.status,
-      message: error.response?.data?.message,
-      error: error.response?.data?.exc || error.message
-    });
+    console.error('[authService.getMe] Failed:', error);
     throw error;
   }
-  },
+},
 
   getAppProfile: async () => {
     try {

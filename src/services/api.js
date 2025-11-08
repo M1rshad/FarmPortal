@@ -63,49 +63,97 @@
 // export default API;
 
 
+// import axios from 'axios';
+
+// const API = axios.create({
+//   baseURL: 'https://faircodelab.frappe.cloud/api',
+//   withCredentials: true,
+//   timeout: 75000,
+// });
+
+// // ✅ Request interceptor: attach CSRF token for POST/PUT/DELETE/PATCH
+// API.interceptors.request.use((config) => {
+//   // For mutating requests, attach CSRF token
+//   if (['post', 'put', 'delete', 'patch'].includes(config.method?.toLowerCase())) {
+//     const m = document.cookie.match(/csrf_token=([^;]+)/);
+//     if (m) {
+//       const token = decodeURIComponent(m[1]);
+//       config.headers['X-Frappe-CSRF-Token'] = token;
+//       console.log(`[API] CSRF token attached for ${config.method.toUpperCase()}`);
+//     } else {
+//       console.warn(`[API] No CSRF token found for ${config.method.toUpperCase()}`);
+//     }
+//   }
+//   return config;
+// });
+
+// // ✅ Response interceptor: learn CSRF from headers and handle errors
+// API.interceptors.response.use(
+//   (resp) => {
+//     // Learn CSRF token from response headers (especially after login)
+//     const csrf = resp.headers?.['x-frappe-csrf-token'];
+//     if (csrf) {
+//       API.defaults.headers.common['X-Frappe-CSRF-Token'] = csrf;
+//       console.log('[API] Learned CSRF token from response header');
+//     }
+//     return resp;
+//   },
+//   (err) => {
+//     // Better error logging
+//     const errorMsg = err.response?.data?.message 
+//       || err.response?.data?.exc 
+//       || err.message 
+//       || 'Unknown error';
+//     console.error(`[API error] Status: ${err.response?.status}, Message: ${errorMsg}`);
+//     return Promise.reject(err);
+//   }
+// );
+
+// export default API;
 import axios from 'axios';
 
 const API = axios.create({
   baseURL: 'https://faircodelab.frappe.cloud/api',
-  withCredentials: true,
-  timeout: 75000,
-});
-
-// ✅ Request interceptor: attach CSRF token for POST/PUT/DELETE/PATCH
-API.interceptors.request.use((config) => {
-  // For mutating requests, attach CSRF token
-  if (['post', 'put', 'delete', 'patch'].includes(config.method?.toLowerCase())) {
-    const m = document.cookie.match(/csrf_token=([^;]+)/);
-    if (m) {
-      const token = decodeURIComponent(m[1]);
-      config.headers['X-Frappe-CSRF-Token'] = token;
-      console.log(`[API] CSRF token attached for ${config.method.toUpperCase()}`);
-    } else {
-      console.warn(`[API] No CSRF token found for ${config.method.toUpperCase()}`);
-    }
-  }
-  return config;
-});
-
-// ✅ Response interceptor: learn CSRF from headers and handle errors
-API.interceptors.response.use(
-  (resp) => {
-    // Learn CSRF token from response headers (especially after login)
-    const csrf = resp.headers?.['x-frappe-csrf-token'];
-    if (csrf) {
-      API.defaults.headers.common['X-Frappe-CSRF-Token'] = csrf;
-      console.log('[API] Learned CSRF token from response header');
-    }
-    return resp;
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
   },
-  (err) => {
-    // Better error logging
-    const errorMsg = err.response?.data?.message 
-      || err.response?.data?.exc 
-      || err.message 
-      || 'Unknown error';
-    console.error(`[API error] Status: ${err.response?.status}, Message: ${errorMsg}`);
-    return Promise.reject(err);
+  withCredentials: true, // CRITICAL: This must be true
+});
+
+// Add response interceptor to handle cookies
+API.interceptors.response.use(
+  (response) => {
+    // Log cookies after each response for debugging
+    console.log('[API] Response cookies:', document.cookie);
+    return response;
+  },
+  (error) => {
+    console.error('[API] Request failed:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add request interceptor
+API.interceptors.request.use(
+  (config) => {
+    // Get CSRF token from cookies
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('csrf_token='))
+      ?.split('=')[1];
+    
+    if (csrfToken) {
+      config.headers['X-Frappe-CSRF-Token'] = csrfToken;
+      console.log('[API] Added CSRF token:', csrfToken);
+    } else {
+      console.log('[API] No CSRF token found for', config.method.toUpperCase());
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
 );
 
