@@ -95,22 +95,48 @@ export const authService = {
     }
   },
 
+  // getMe: async () => {
+  //   try {
+  //     console.log('[authService.getMe] Fetching current user info');
+  //     // const { data } = await API.get('/method/farmportal.api.me.me');
+  //     const { data } = await API.get('/method/farmportal.custom_api.get_current_user');
+  //     const result = unwrap(data);
+  //     console.log('[authService.getMe] Success:', result);
+  //     return result;
+  //   } catch (error) {
+  //     console.error('[authService.getMe] Failed:', {
+  //       status: error.response?.status,
+  //       message: error.response?.data?.message,
+  //       error: error.response?.data?.exc || error.message
+  //     });
+  //     throw error;
+  //   }
+  // },
   getMe: async () => {
-    try {
-      console.log('[authService.getMe] Fetching current user info');
-      // const { data } = await API.get('/method/farmportal.api.me.me');
-      const { data } = await API.get('/method/farmportal.custom_api.get_current_user');
-      const result = unwrap(data);
-      console.log('[authService.getMe] Success:', result);
-      return result;
-    } catch (error) {
-      console.error('[authService.getMe] Failed:', {
-        status: error.response?.status,
-        message: error.response?.data?.message,
-        error: error.response?.data?.exc || error.message
-      });
-      throw error;
-    }
+  try {
+    console.log('[authService.getMe] Fetching current user info');
+    // Test with Frappe's built-in method first
+    const { data } = await API.get('/method/frappe.auth.get_logged_user');
+    const result = unwrap(data);
+    console.log('[authService.getMe] Success:', result);
+    
+    // If this works, we know session is fine and it's a whitelisting issue
+    return {
+      user: {
+        name: result,
+        full_name: result,
+        email: result,
+        roles: []
+      }
+    };
+  } catch (error) {
+    console.error('[authService.getMe] Failed:', {
+      status: error.response?.status,
+      message: error.response?.data?.message,
+      error: error.response?.data?.exc || error.message
+    });
+    throw error;
+  }
   },
 
   getAppProfile: async () => {
