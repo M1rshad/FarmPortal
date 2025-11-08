@@ -98,7 +98,8 @@ export const authService = {
   getMe: async () => {
     try {
       console.log('[authService.getMe] Fetching current user info');
-      const { data } = await API.get('/method/farmportal.api.me.me');
+      // const { data } = await API.get('/method/farmportal.api.me.me');
+      const { data } = await API.get('/method/farmportal.custom_api.get_current_user');
       const result = unwrap(data);
       console.log('[authService.getMe] Success:', result);
       return result;
