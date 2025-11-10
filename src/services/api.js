@@ -110,49 +110,108 @@
 // );
 
 // export default API;
+// import axios from 'axios';
+
+// const API = axios.create({
+//   baseURL: 'https://faircodelab.frappe.cloud/api',
+//   headers: {
+//     'Accept': 'application/json',
+//     'Content-Type': 'application/json',
+//   },
+//   withCredentials: true, // CRITICAL: This must be true
+// });
+
+// // Add response interceptor to handle cookies
+// API.interceptors.response.use(
+//   (response) => {
+//     // Log cookies after each response for debugging
+//     console.log('[API] Response cookies:', document.cookie);
+//     return response;
+//   },
+//   (error) => {
+//     console.error('[API] Request failed:', error);
+//     return Promise.reject(error);
+//   }
+// );
+
+// // Add request interceptor
+// API.interceptors.request.use(
+//   (config) => {
+//     // Get CSRF token from cookies
+//     const csrfToken = document.cookie
+//       .split('; ')
+//       .find(row => row.startsWith('csrf_token='))
+//       ?.split('=')[1];
+    
+//     if (csrfToken) {
+//       config.headers['X-Frappe-CSRF-Token'] = csrfToken;
+//       console.log('[API] Added CSRF token:', csrfToken);
+//     } else {
+//       console.log('[API] No CSRF token found for', config.method.toUpperCase());
+//     }
+    
+//     return config;
+//   },
+//   (error) => {
+//     return Promise.reject(error);
+//   }
+// );
+
+// export default API;
+
 import axios from 'axios';
 
 const API = axios.create({
+  // baseURL: 'http://127.0.0.1:8000/api',
   baseURL: 'https://faircodelab.frappe.cloud/api',
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // CRITICAL: This must be true
+  withCredentials: false, // No cookies needed with API key auth
 });
 
-// Add response interceptor to handle cookies
-API.interceptors.response.use(
-  (response) => {
-    // Log cookies after each response for debugging
-    console.log('[API] Response cookies:', document.cookie);
-    return response;
-  },
-  (error) => {
-    console.error('[API] Request failed:', error);
-    return Promise.reject(error);
-  }
-);
-
-// Add request interceptor
+// Add API Key authentication to each request
 API.interceptors.request.use(
   (config) => {
-    // Get CSRF token from cookies
-    const csrfToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('csrf_token='))
-      ?.split('=')[1];
+    const apiKey = localStorage.getItem('api_key');
+    const apiSecret = localStorage.getItem('api_secret');
     
-    if (csrfToken) {
-      config.headers['X-Frappe-CSRF-Token'] = csrfToken;
-      console.log('[API] Added CSRF token:', csrfToken);
+    if (apiKey && apiSecret) {
+      // Frappe expects "token api_key:api_secret" format
+      const token = `${apiKey}:${apiSecret}`;
+      config.headers['Authorization'] = `token ${token}`;
+      console.log('[API] Using API key authentication');
     } else {
-      console.log('[API] No CSRF token found for', config.method.toUpperCase());
+      console.log('[API] No API credentials found');
     }
     
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for debugging
+API.interceptors.response.use(
+  (response) => {
+    console.log('[API] Response success:', response.config.url);
+    return response;
+  },
+  (error) => {
+    console.error('[API] Request failed:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.response?.data?.message || error.message
+    });
+    
+    // If unauthorized, clear stored credentials
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.removeItem('api_key');
+      localStorage.removeItem('api_secret');
+    }
+    
     return Promise.reject(error);
   }
 );
