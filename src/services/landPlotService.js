@@ -167,18 +167,30 @@ export const landPlotService = {
     return unwrap(data);
   },
 
+  // uploadImportFile: async ({ name, file }) => {
+  //   const form = new FormData();
+  //   form.append('file', file);
+  //   form.append('is_private', 1);
+  //   form.append('doctype', 'Land Plot Import');
+  //   form.append('docname', name);
+  //   form.append('fieldname', 'source_file');
+  //   const { data } = await API.post('/method/upload_file', form, {
+  //     headers: { 'Content-Type': 'multipart/form-data' },
+  //   });
+  //   return data?.message || data;
+  // },
   uploadImportFile: async ({ name, file }) => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('is_private', 1);
-    form.append('doctype', 'Land Plot Import');
-    form.append('docname', name);
-    form.append('fieldname', 'source_file');
-    const { data } = await API.post('/method/upload_file', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return data?.message || data;
-  },
+  const form = new FormData();
+  form.append('file', file);
+  form.append('is_private', 1);
+  form.append('doctype', 'Land Plot Import');
+  form.append('docname', name);
+  form.append('fieldname', 'source_file');
+  
+  // Remove the headers config entirely - axios handles it automatically
+  const { data } = await API.post('/method/upload_file', form);
+  return data?.message || data;
+},
 
   finalizeImport: async ({ name, total_plots, log, status }) => {
     const { data } = await API.post('/method/farmportal.api.landplots.finalize_import', {

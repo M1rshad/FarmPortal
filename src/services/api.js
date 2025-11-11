@@ -194,6 +194,27 @@ API.interceptors.request.use(
 );
 
 // Response interceptor for debugging
+// API.interceptors.response.use(
+//   (response) => {
+//     console.log('[API] Response success:', response.config.url);
+//     return response;
+//   },
+//   (error) => {
+//     console.error('[API] Request failed:', {
+//       url: error.config?.url,
+//       status: error.response?.status,
+//       message: error.response?.data?.message || error.message
+//     });
+    
+//     // If unauthorized, clear stored credentials
+//     if (error.response?.status === 401 || error.response?.status === 403) {
+//       localStorage.removeItem('api_key');
+//       localStorage.removeItem('api_secret');
+//     }
+    
+//     return Promise.reject(error);
+//   }
+// );
 API.interceptors.response.use(
   (response) => {
     console.log('[API] Response success:', response.config.url);
@@ -206,14 +227,17 @@ API.interceptors.response.use(
       message: error.response?.data?.message || error.message
     });
     
-    // If unauthorized, clear stored credentials
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Only clear credentials on 401 (invalid/expired token)
+    // Don't clear on 403 (permissions issue) - token may still be valid
+    if (error.response?.status === 401) {
       localStorage.removeItem('api_key');
       localStorage.removeItem('api_secret');
+      console.log('[API] Credentials cleared due to 401');
     }
     
     return Promise.reject(error);
   }
 );
+
 
 export default API;
