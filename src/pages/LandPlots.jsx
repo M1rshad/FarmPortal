@@ -2324,6 +2324,7 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from 'react';
 import { supplierService } from '../services/supplierService';
 import { landPlotService } from '../services/landPlotService';
+import { useAuth } from '../context/AuthContext';
 import {
   Box,
   Paper,
@@ -2407,19 +2408,50 @@ function centroidLatLng(latlngs) {
 /* ---------------- Context with API Integration ---------------- */
 const DataContext = createContext();
 
+// export const DataProvider = ({ children }) => {
+//   const [landPlots, setLandPlots] = useState([]);
+//   const [loading, setLoading] = useState(true);
+
+//   // Fetch land plots from backend
+//   const fetchLandPlots = async () => {
+//     try {
+//       setLoading(true);
+//       const response = await landPlotService.getLandPlots();
+//       setLandPlots(response?.data || []);
+//     } catch (error) {
+//       console.error('Failed to fetch land plots:', error);
+//       toast.error('Failed to load land plots');
+//       setLandPlots([]);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
 export const DataProvider = ({ children }) => {
+  const { isAuthenticated, loading: authLoading } = useAuth(); // Add this line
+  
   const [landPlots, setLandPlots] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Change from true to false
 
   // Fetch land plots from backend
   const fetchLandPlots = async () => {
+    // ✅ Add authentication check at the start
+    if (!isAuthenticated) {
+      console.log('[DataProvider] Not authenticated, skipping fetch');
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await landPlotService.getLandPlots();
       setLandPlots(response?.data || []);
     } catch (error) {
       console.error('Failed to fetch land plots:', error);
-      toast.error('Failed to load land plots');
+      
+      // Don't show toast for auth errors (401/403)
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        toast.error('Failed to load land plots');
+      }
+      
       setLandPlots([]);
     } finally {
       setLoading(false);
@@ -2487,9 +2519,19 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  // useEffect(() => {
+  //   fetchLandPlots();
+  // }, []);
   useEffect(() => {
-    fetchLandPlots();
-  }, []);
+    if (!authLoading && isAuthenticated) {
+      // Auth is loaded and user is authenticated - fetch data
+      fetchLandPlots();
+    } else if (!authLoading && !isAuthenticated) {
+      // Not authenticated - clear data and stop loading
+      setLandPlots([]);
+      setLoading(false);
+    }
+  }, [authLoading, isAuthenticated]);
 
   return (
     <DataContext.Provider value={{ 
