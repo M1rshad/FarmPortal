@@ -61,8 +61,8 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <DataProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <DataProvider>
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -162,8 +162,8 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Router>
-        </AuthProvider>
-      </DataProvider>
+        </DataProvider>
+      </AuthProvider>
       <ToastContainer position="top-right" autoClose={5000} />
     </ThemeProvider>
   );
