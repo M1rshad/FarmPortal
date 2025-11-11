@@ -494,10 +494,51 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Use authService helper + user data for authentication check
-  const isAuthenticated = !!(user && authService.isAuthenticated());
-  const isEmployee = !!user?.employee || user?.roles?.has('Employee') || false;
-  const isSupplier = !!user?.supplier || user?.roles?.has('Supplier') || false;
+//   // Use authService helper + user data for authentication check
+//   const isAuthenticated = !!(user && authService.isAuthenticated());
+//   const isEmployee = !!user?.employee || user?.roles?.has('Employee') || false;
+//   const isSupplier = !!user?.supplier || user?.roles?.has('Supplier') || false;
+
+//   const value = useMemo(
+//     () => ({
+//       user,
+//       loading,
+//       isAuthenticated,
+//       isEmployee,
+//       isSupplier,
+//       isCustomer: user?.roles?.has('Customer') || false,
+//       login,
+//       logout,
+//       refreshUser,
+//       setUser,
+//     }),
+//     [user, loading, isAuthenticated, isEmployee, isSupplier]
+//   );
+
+//   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+// };
+// Helper function to safely check roles
+  const hasRole = (user, roleName) => {
+    if (!user || !user.roles) return false;
+    
+    // Handle Set (fresh from normalizeMe)
+    if (user.roles instanceof Set) {
+      return user.roles.has(roleName);
+    }
+    
+    // Handle Array (from sessionStorage)
+    if (Array.isArray(user.rolesArray)) {
+      return user.rolesArray.includes(roleName);
+    }
+    
+    // Fallback: check rolesArray
+    return false;
+  };
+
+  // Update role checks to use helper function
+  const isEmployee = !!user?.employee || hasRole(user, 'Employee');
+  const isSupplier = !!user?.supplier || hasRole(user, 'Supplier');
+  const isCustomer = hasRole(user, 'Customer');
 
   const value = useMemo(
     () => ({
@@ -506,13 +547,13 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       isEmployee,
       isSupplier,
-      isCustomer: user?.roles?.has('Customer') || false,
+      isCustomer,
       login,
       logout,
       refreshUser,
       setUser,
     }),
-    [user, loading, isAuthenticated, isEmployee, isSupplier]
+    [user, loading, isAuthenticated, isEmployee, isSupplier, isCustomer]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
