@@ -350,6 +350,215 @@
 
 //   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 // };
+// import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
+// import { authService } from '../services/authService';
+// import { toast } from 'react-toastify';
+
+// const AuthContext = createContext(null);
+
+// export const useAuth = () => {
+//   const ctx = useContext(AuthContext);
+//   if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+//   return ctx;
+// };
+
+// const normalizeMe = (res) => {
+//   const payload = res?.message ?? res ?? null;
+//   if (!payload?.user) return null;
+
+//   const rolesArray = Array.isArray(payload.user.roles) ? payload.user.roles : [];
+//   const roles = new Set(rolesArray);
+
+//   return {
+//     name: payload.user.name,
+//     full_name: payload.user.full_name,
+//     email: payload.user.email,
+//     display_name: payload.display_name || payload.user.full_name || payload.user.name,
+//     account_type: payload.account_type || 'User',
+//     rolesArray,
+//     roles,
+//     employee: payload.employee || null,
+//     supplier: payload.supplier || null,
+//     customer: payload.customer || null,
+//     profile: payload.profile || null,
+//   };
+// };
+
+// export const AuthProvider = ({ children }) => {
+//   // Initialize from sessionStorage
+//   const initial = (() => {
+//     try {
+//       const raw = sessionStorage.getItem('fp:user');
+//       return raw ? JSON.parse(raw) : null;
+//     } catch {
+//       return null;
+//     }
+//   })();
+
+//   const [user, setUser] = useState(initial);
+//   const [loading, setLoading] = useState(true);
+
+//   const persist = (u) => {
+//     try {
+//       if (u) {
+//         sessionStorage.setItem('fp:user', JSON.stringify(u));
+//       } else {
+//         sessionStorage.removeItem('fp:user');
+//       }
+//     } catch {}
+//   };
+
+//   const refreshUser = async () => {
+//     // Use authService helper to check credentials
+//     if (!authService.isAuthenticated()) {
+//       throw new Error('No API credentials found');
+//     }
+
+//     const me = await authService.getMe();
+//     const u = normalizeMe(me);
+//     setUser(u);
+//     persist(u);
+//     return u;
+//   };
+
+//   // Initial auth check on mount
+//   useEffect(() => {
+//     let cancelled = false;
+
+//     (async () => {
+//       const hasCredentials = authService.isAuthenticated();
+      
+//       if (hasCredentials) {
+//         // We have credentials - fetch/validate user data
+//         try {
+//           const u = await refreshUser();
+//           if (!cancelled) setUser(u);
+//         } catch (err) {
+//           console.error('[AuthContext] Failed to load user:', err);
+//           if (!cancelled) {
+//             setUser(null);
+//             persist(null);
+//             // Don't clear credentials here - let api.js interceptor handle 401
+//           }
+//         } finally {
+//           if (!cancelled) setLoading(false);
+//         }
+//       } else {
+//         // No credentials - user not authenticated
+//         if (!cancelled) {
+//           setUser(null);
+//           persist(null);
+//           setLoading(false);
+//         }
+//       }
+//     })();
+
+//     return () => {
+//       cancelled = true;
+//     };
+//     // eslint-disable-next-line react-hooks/exhaustive-deps
+//   }, []);
+
+//   const login = async (email, password) => {
+//     try {
+//       // authService.login already stores credentials and fetches user data
+//       const res = await authService.login({ email, password });
+      
+//       const u = normalizeMe(res.user);
+//       setUser(u);
+//       persist(u);
+      
+//       toast.success('Login successful!');
+//       return { success: !!u, user: u };
+//     } catch (error) {
+//       const message =
+//         error.response?.data?.exception ||
+//         error.response?.data?.message ||
+//         error.response?.data?.error ||
+//         'Login failed';
+      
+//       toast.error(message);
+//       return { success: false, error: message };
+//     }
+//   };
+
+//   const logout = async () => {
+//     try {
+//       await authService.logout();
+//     } catch (err) {
+//       console.error('[AuthContext] Logout error:', err);
+//     } finally {
+//       setUser(null);
+//       persist(null);
+//       toast.info('Logged out successfully');
+//     }
+//   };
+
+// //   // Use authService helper + user data for authentication check
+// //   const isAuthenticated = !!(user && authService.isAuthenticated());
+// //   const isEmployee = !!user?.employee || user?.roles?.has('Employee') || false;
+// //   const isSupplier = !!user?.supplier || user?.roles?.has('Supplier') || false;
+
+// //   const value = useMemo(
+// //     () => ({
+// //       user,
+// //       loading,
+// //       isAuthenticated,
+// //       isEmployee,
+// //       isSupplier,
+// //       isCustomer: user?.roles?.has('Customer') || false,
+// //       login,
+// //       logout,
+// //       refreshUser,
+// //       setUser,
+// //     }),
+// //     [user, loading, isAuthenticated, isEmployee, isSupplier]
+// //   );
+
+// //   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+// // };
+// // Helper function to safely check roles
+//   const hasRole = (user, roleName) => {
+//     if (!user || !user.roles) return false;
+    
+//     // Handle Set (fresh from normalizeMe)
+//     if (user.roles instanceof Set) {
+//       return user.roles.has(roleName);
+//     }
+    
+//     // Handle Array (from sessionStorage)
+//     if (Array.isArray(user.rolesArray)) {
+//       return user.rolesArray.includes(roleName);
+//     }
+    
+//     // Fallback: check rolesArray
+//     return false;
+//   };
+
+//   // Update role checks to use helper function
+//   const isEmployee = !!user?.employee || hasRole(user, 'Employee');
+//   const isSupplier = !!user?.supplier || hasRole(user, 'Supplier');
+//   const isCustomer = hasRole(user, 'Customer');
+
+//   const value = useMemo(
+//     () => ({
+//       user,
+//       loading,
+//       isAuthenticated,
+//       isEmployee,
+//       isSupplier,
+//       isCustomer,
+//       login,
+//       logout,
+//       refreshUser,
+//       setUser,
+//     }),
+//     [user, loading, isAuthenticated, isEmployee, isSupplier, isCustomer]
+//   );
+
+//   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+// };
+
 import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
 import { authService } from '../services/authService';
 import { toast } from 'react-toastify';
@@ -385,11 +594,20 @@ const normalizeMe = (res) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  // Initialize from sessionStorage
+  // Initialize from sessionStorage and re-hydrate roles as Set
   const initial = (() => {
     try {
       const raw = sessionStorage.getItem('fp:user');
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      
+      const parsed = JSON.parse(raw);
+      
+      // Re-hydrate roles as Set if rolesArray exists
+      if (parsed && Array.isArray(parsed.rolesArray)) {
+        parsed.roles = new Set(parsed.rolesArray);
+      }
+      
+      return parsed;
     } catch {
       return null;
     }
@@ -409,7 +627,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const refreshUser = async () => {
-    // Use authService helper to check credentials
     if (!authService.isAuthenticated()) {
       throw new Error('No API credentials found');
     }
@@ -429,7 +646,6 @@ export const AuthProvider = ({ children }) => {
       const hasCredentials = authService.isAuthenticated();
       
       if (hasCredentials) {
-        // We have credentials - fetch/validate user data
         try {
           const u = await refreshUser();
           if (!cancelled) setUser(u);
@@ -438,13 +654,11 @@ export const AuthProvider = ({ children }) => {
           if (!cancelled) {
             setUser(null);
             persist(null);
-            // Don't clear credentials here - let api.js interceptor handle 401
           }
         } finally {
           if (!cancelled) setLoading(false);
         }
       } else {
-        // No credentials - user not authenticated
         if (!cancelled) {
           setUser(null);
           persist(null);
@@ -461,13 +675,10 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      // authService.login already stores credentials and fetches user data
       const res = await authService.login({ email, password });
-      
       const u = normalizeMe(res.user);
       setUser(u);
       persist(u);
-      
       toast.success('Login successful!');
       return { success: !!u, user: u };
     } catch (error) {
@@ -476,7 +687,6 @@ export const AuthProvider = ({ children }) => {
         error.response?.data?.message ||
         error.response?.data?.error ||
         'Login failed';
-      
       toast.error(message);
       return { success: false, error: message };
     }
@@ -494,52 +704,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-//   // Use authService helper + user data for authentication check
-//   const isAuthenticated = !!(user && authService.isAuthenticated());
-//   const isEmployee = !!user?.employee || user?.roles?.has('Employee') || false;
-//   const isSupplier = !!user?.supplier || user?.roles?.has('Supplier') || false;
+  // ✅ Define ALL computed values BEFORE useMemo
+  const isAuthenticated = !!(user && authService.isAuthenticated());
+  const isEmployee = !!user?.employee || user?.roles?.has('Employee') || false;
+  const isSupplier = !!user?.supplier || user?.roles?.has('Supplier') || false;
+  const isCustomer = user?.roles?.has('Customer') || false;
 
-//   const value = useMemo(
-//     () => ({
-//       user,
-//       loading,
-//       isAuthenticated,
-//       isEmployee,
-//       isSupplier,
-//       isCustomer: user?.roles?.has('Customer') || false,
-//       login,
-//       logout,
-//       refreshUser,
-//       setUser,
-//     }),
-//     [user, loading, isAuthenticated, isEmployee, isSupplier]
-//   );
-
-//   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-// };
-// Helper function to safely check roles
-  const hasRole = (user, roleName) => {
-    if (!user || !user.roles) return false;
-    
-    // Handle Set (fresh from normalizeMe)
-    if (user.roles instanceof Set) {
-      return user.roles.has(roleName);
-    }
-    
-    // Handle Array (from sessionStorage)
-    if (Array.isArray(user.rolesArray)) {
-      return user.rolesArray.includes(roleName);
-    }
-    
-    // Fallback: check rolesArray
-    return false;
-  };
-
-  // Update role checks to use helper function
-  const isEmployee = !!user?.employee || hasRole(user, 'Employee');
-  const isSupplier = !!user?.supplier || hasRole(user, 'Supplier');
-  const isCustomer = hasRole(user, 'Customer');
-
+  // ✅ Now use them in useMemo - they're already defined above
   const value = useMemo(
     () => ({
       user,
