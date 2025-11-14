@@ -163,7 +163,10 @@ import axios from 'axios';
 
 const API = axios.create({
   // baseURL: 'http://127.0.0.1:8000/api',
-  baseURL: 'https://faircodelab.frappe.cloud/api',
+  // baseURL: 'https://faircodelab.frappe.cloud/api',
+  baseURL: import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api',  // still works via Vite proxy in local dev
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json',

@@ -1,6 +1,18 @@
 import API from './api';
 const unwrap = (d) => d?.message ?? d ?? null;
 
+async function uploadFile(file, isPrivate = 1) {
+  if (!file) return null;
+  const form = new FormData();
+  form.append("file", file);
+  form.append("is_private", String(isPrivate));
+
+  const { data } = await API.post("/method/upload_file", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data?.message?.file_url || null;
+}
+
 export const questionnaireService = {
   create: async ({ supplierId, title, questions, dueDate }) => {
     const { data } = await API.post('/method/farmportal.api.questionnaires.create_questionnaire', {
@@ -36,4 +48,22 @@ export const questionnaireService = {
     });
     return unwrap(data);
   },
+  // Upload file for questionnaire - uses Frappe's built-in endpoint
+  uploadFile: async (qId, rowname, file) => {
+    // Upload file using Frappe's standard upload
+    const fileUrl = await uploadFile(file, 1);
+    
+    if (!fileUrl) {
+      throw new Error('File upload failed');
+    }
+    
+    // Return in the format expected by the component
+    return {
+      file_url: fileUrl,
+      file_name: file.name,
+      rowname: rowname,
+      message: 'File uploaded successfully'
+    };
+  },
+
 };

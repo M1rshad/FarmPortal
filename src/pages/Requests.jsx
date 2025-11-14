@@ -3061,11 +3061,44 @@ const Requests = () => {
   //     null,
   //   responseMessage: r.responseMessage || r.response_message || null,
   // }));
-  const normalize = (list) => (Array.isArray(list) ? list : []).map((r) => {
-  // Try to extract PO number from message if custom field doesn't exist
+//   const normalize = (list) => (Array.isArray(list) ? list : []).map((r) => {
+//     console.log('🔍 Raw request data:', r); // ✅ ADD THIS
+
+//   // Try to extract PO number from message if custom field doesn't exist
+//   let purchaseOrderNumber = r.purchase_order_number || r.purchaseOrderNumber || '';
+  
+//   // If no PO number in custom field, try to extract from message
+//   if (!purchaseOrderNumber && r.message && r.request_type === 'purchase_order') {
+//     const poMatch = r.message.match(/Purchase Order Number:\s*([^\n\r]+)/i);
+//     if (poMatch) {
+//       purchaseOrderNumber = poMatch[1].trim();
+//     }
+//   }
+
+//   return {
+//     _id: r._id || r.id || r.name || '',
+//     customer: normalizeParty(r.customer || r.customer_info || r.customer_details),
+//     supplier: normalizeParty(r.supplier || r.supplier_info || r.supplier_details),
+//     requestType: r.requestType || r.request_type || '',
+//     status: r.status || 'Pending',
+//     purchaseOrderNumber: purchaseOrderNumber, // ✅ Fixed PO number extraction
+//     message: r.message || '',   
+//     createdAt:
+//       r.createdAt ||
+//       r.creation ||
+//       r.created_on ||
+//       r.created_at ||
+//       r.posting_date ||
+//       r.modified ||
+//       null,
+//     responseMessage: r.responseMessage || r.response_message || null,
+//   };
+//   console.log('✅ Normalized request:', normalized); // ✅ ADD THIS
+//   console.log('📝 Message field:', normalized.message); // ✅ ADD THIS
+// });
+const normalize = (list) => (Array.isArray(list) ? list : []).map((r) => {
   let purchaseOrderNumber = r.purchase_order_number || r.purchaseOrderNumber || '';
   
-  // If no PO number in custom field, try to extract from message
   if (!purchaseOrderNumber && r.message && r.request_type === 'purchase_order') {
     const poMatch = r.message.match(/Purchase Order Number:\s*([^\n\r]+)/i);
     if (poMatch) {
@@ -3073,13 +3106,14 @@ const Requests = () => {
     }
   }
 
-  return {
+  const normalized = {
     _id: r._id || r.id || r.name || '',
     customer: normalizeParty(r.customer || r.customer_info || r.customer_details),
     supplier: normalizeParty(r.supplier || r.supplier_info || r.supplier_details),
     requestType: r.requestType || r.request_type || '',
     status: r.status || 'Pending',
-    purchaseOrderNumber: purchaseOrderNumber, // ✅ Fixed PO number extraction
+    purchaseOrderNumber: purchaseOrderNumber,
+    message: r.message || '', // ✅ This should capture "Hello"
     createdAt:
       r.createdAt ||
       r.creation ||
@@ -3090,8 +3124,12 @@ const Requests = () => {
       null,
     responseMessage: r.responseMessage || r.response_message || null,
   };
-});
-
+  
+  // ✅ ADD THIS DEBUG LOG
+  console.log('📝 Normalized message:', normalized.message, 'for request:', normalized._id);
+  
+  return normalized;
+}); 
 
   const asKey = (s) => (s || '').toLowerCase();
   
@@ -3490,7 +3528,7 @@ const Requests = () => {
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           
-                          {/* Supplier actions */}
+                          {/* Supplier actions - Show "Respond" button for pending requests */}
                           {isSupplier && asKey(request.status) === 'pending' && (
                             <Button
                               size="small"
@@ -3508,8 +3546,8 @@ const Requests = () => {
                             </Button>
                           )}
 
-                          {/* View shared data for completed requests */}
-                          {isCompletedStatus(request.status) && (
+                          {/* ✅ UPDATED: View shared data - ONLY for CUSTOMERS (not suppliers) */}
+                          {!isSupplier && isCompletedStatus(request.status) && (
                             <>
                               {request.requestType === 'land_plot' && (
                                 <IconButton
@@ -3533,8 +3571,18 @@ const Requests = () => {
                               )}
                             </>
                           )}
+
+                          {/* ✅ OPTIONAL: Show a simple indicator for suppliers that they've shared data */}
+                          {isSupplier && isCompletedStatus(request.status) && (
+                            <Chip 
+                              label="Completed" 
+                              color="success" 
+                              size="small"
+                            />
+                          )}
                         </Box>
                       </TableCell>
+
                     </TableRow>
                   );
                 })}
@@ -3731,6 +3779,7 @@ const Requests = () => {
           <Button onClick={() => setSharedPlotsDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+      {console.log('🔍 Selected Request for Modal:', selectedRequest)}
 
       {/* Land Plot Response Modal */}
       <RespondToRequestModal
@@ -3745,7 +3794,10 @@ const Requests = () => {
         selectedPlots={selectedPlots}
         onPlotsChange={setSelectedPlots}
         showPlotSelection={selectedRequest?.requestType === 'land_plot'}
+        requestMessage={selectedRequest?.message || ''} // ✅ Make sure this line is here
+        requestDetails={selectedRequest} // ✅ Make sure this line is here
       />
+
 
       {/* Purchase Order Response Modal (for suppliers) */}
       <PurchaseOrderResponseModal

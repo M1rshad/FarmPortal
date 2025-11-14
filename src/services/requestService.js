@@ -154,11 +154,34 @@ respondToRequest: async (requestId, payload) => {
   },
 
   // Get shared plots for a specific request
+  // getSharedPlots: async (requestId) => {
+  //   const { data } = await API.get('/method/farmportal.api.requests.get_shared_plots', {
+  //     params: { request_id: requestId }
+  //   });
+  //   console.log(data)
+  //   return unwrap(data) || { plots: [], request: null };
+  // },
   getSharedPlots: async (requestId) => {
     const { data } = await API.get('/method/farmportal.api.requests.get_shared_plots', {
       params: { request_id: requestId }
     });
-    return unwrap(data) || { plots: [], request: null };
+    
+    // ✅ FIX: Frappe wraps response in 'message' object
+    const unwrappedData = unwrap(data);
+    
+    console.log('🔍 Raw API data:', data);
+    console.log('🔍 Unwrapped data:', unwrappedData);
+    
+    // ✅ Handle both response formats
+    if (unwrappedData) {
+      return {
+        plots: unwrappedData.plots || [],
+        request: unwrappedData.request || null
+      };
+    }
+    
+    // Fallback
+    return { plots: [], request: null };
   },
 
   uploadRequestAttachment: async (requestId, file, opts = {}) => {
