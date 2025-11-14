@@ -1803,11 +1803,11 @@ const LandPlots = () => {
 
 
   // Update layer control when tile URLs are loaded
-  useEffect(() => {
-    if (mapReady && leafletMapRef.current) {
-      setupLayerControl(leafletMapRef.current);
-    }
-  }, [mapReady]);
+  // useEffect(() => {
+  //   if (mapReady && leafletMapRef.current) {
+  //     setupLayerControl(leafletMapRef.current);
+  //   }
+  // }, [mapReady]);
   // Add this after your main map useEffect, inside your LandPlots component
 // useEffect(() => {
 //   if (viewMode === 'map' && leafletMapRef.current) {
