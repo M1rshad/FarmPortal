@@ -2560,7 +2560,7 @@ useEffect(() => {
           console.error('ERPNext upload failed', err);
           setErpStatus('error');
           setErpLog(String(err?.response?.data?.message || err?.message || err));
-          toast.error('File import tracking failed, but you can still import the plots');
+          // toast.error('File import tracking failed, but you can still import the plots');
         }
       })();
     } catch (error) {
