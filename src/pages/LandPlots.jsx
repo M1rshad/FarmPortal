@@ -1531,6 +1531,7 @@ import React, { useState, useEffect, useRef, useContext, createContext } from 'r
 import { supplierService } from '../services/supplierService';
 import { landPlotService } from '../services/landPlotService';
 import { useAuth } from '../context/AuthContext';
+// import 'mapbox-gl/dist/mapbox-gl.css';
 import {
   Box,
   Paper,
@@ -1797,34 +1798,26 @@ const LandPlots = () => {
   const baseLayers = useRef({});
   const treeCoverLayerRef = useRef(null);
   const deforestationLayerRef = useRef(null);
+  const rotationIntervalRef = useRef(null);
 
   /* ---------------- Effects ---------------- */
   useEffect(() => { fetchProducts(); }, []);
 
-
-  // Update layer control when tile URLs are loaded
-  // useEffect(() => {
-  //   if (mapReady && leafletMapRef.current) {
-  //     setupLayerControl(leafletMapRef.current);
-  //   }
-  // }, [mapReady]);
-  // Add this after your main map useEffect, inside your LandPlots component
-// useEffect(() => {
-//   if (viewMode === 'map' && leafletMapRef.current) {
-//     // Delay slightly to let tab render (if using Material UI Tabs, this is important)
-//     setTimeout(() => {
-//       leafletMapRef.current.invalidateSize();
-//     }, 100);
-//   }
-// }, [viewMode]);
 
 useEffect(() => {
   if (viewMode === 'map' && leafletMapRef.current && mapReady) {
     requestAnimationFrame(() => {
       setTimeout(() => {
         if (leafletMapRef.current) {
-          leafletMapRef.current.invalidateSize();
-          drawPlots();
+          // Mapbox handles resizing automatically, just redraw plots
+          const map = leafletMapRef.current;
+          if (map.isStyleLoaded()) {
+            drawPlots();
+          } else {
+            map.once('style.load', () => {
+              drawPlots();
+            });
+          }
         }
       }, 250);
     });
@@ -1834,19 +1827,45 @@ useEffect(() => {
 useEffect(() => {
   if (!leafletMapRef.current) return;
   const handleResize = () => {
-    leafletMapRef.current.invalidateSize();
+    // Mapbox automatically handles resize, but we can trigger it explicitly if needed
+    const map = leafletMapRef.current;
+    if (map && typeof map.resize === 'function') {
+      map.resize();
+    }
   };
   window.addEventListener('resize', handleResize);
   return () => window.removeEventListener('resize', handleResize);
 }, [mapReady]);
 
 
-  // // Map initialization
   // useEffect(() => {
   //   if (viewMode !== 'map') return;
 
+  //   let mounted = true;
+  //   let initTimer = null;
+
   //   const initMap = async () => {
   //     try {
+  //       console.log('Starting map initialization...');
+
+  //       // Wait for container with polling
+  //       let attempts = 0;
+  //       const maxAttempts = 20;
+        
+  //       while (!mapContainerRef.current && mounted && attempts < maxAttempts) {
+  //         console.log(`Waiting for container... attempt ${attempts + 1}/${maxAttempts}`);
+  //         await new Promise(resolve => setTimeout(resolve, 100));
+  //         attempts++;
+  //       }
+
+  //       if (!mapContainerRef.current) {
+  //         console.error('Map container still not available after waiting');
+  //         if (mounted) setMapReady(true);
+  //         return;
+  //       }
+
+  //       console.log('Container found, loading Leaflet...');
+
   //       // Load CSS first
   //       if (!document.getElementById('leaflet-css')) {
   //         const leafletCSS = document.createElement('link');
@@ -1864,7 +1883,7 @@ useEffect(() => {
   //         document.head.appendChild(drawCSS);
   //       }
 
-  //       // Load Leaflet JS and WAIT for it to load
+  //       // Load Leaflet JS
   //       if (!window.L) {
   //         await new Promise((resolve, reject) => {
   //           const script = document.createElement('script');
@@ -1876,7 +1895,7 @@ useEffect(() => {
   //         });
   //       }
 
-  //       // Load Leaflet Draw and WAIT for it to load
+  //       // Load Leaflet Draw
   //       if (!window.L?.Draw) {
   //         await new Promise((resolve, reject) => {
   //           const script = document.createElement('script');
@@ -1888,6 +1907,19 @@ useEffect(() => {
   //         });
   //       }
 
+  //       // Check if still mounted after async operations
+  //       if (!mounted) {
+  //         console.log('Component unmounted during script loading');
+  //         return;
+  //       }
+
+  //       // Double-check container still exists
+  //       if (!mapContainerRef.current) {
+  //         console.error('Container disappeared during script loading');
+  //         if (mounted) setMapReady(true);
+  //         return;
+  //       }
+
   //       const L = window.L;
         
   //       if (!L) {
@@ -1896,17 +1928,21 @@ useEffect(() => {
 
   //       // Clean up existing map
   //       if (leafletMapRef.current) {
-  //         leafletMapRef.current.remove();
+  //         try {
+  //           leafletMapRef.current.remove();
+  //         } catch (e) {
+  //           console.error('Error removing old map:', e);
+  //         }
   //         leafletMapRef.current = null;
   //       }
-
-  //       if (!mapContainerRef.current) return;
+        
+  //       console.log('Creating map in container...');
   //       mapContainerRef.current.innerHTML = '';
 
   //       // Define base layers
   //       baseLayers.current = {
   //         satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  //           attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+  //           attribution: 'Tiles © Esri',
   //           maxZoom: 18
   //         }),
   //         street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1920,15 +1956,17 @@ useEffect(() => {
   //         })
   //       };
 
-  //       // Create map with satellite as default
+  //       // Create map
   //       const map = L.map(mapContainerRef.current, {
   //         center: [20, 0],
   //         zoom: 2,
   //         zoomControl: true,
   //         dragging: true,
   //         scrollWheelZoom: true,
-  //         layers: [baseLayers.current.satellite] // Start with satellite
+  //         layers: [baseLayers.current.satellite]
   //       });
+
+  //       if (!mounted) return;
 
   //       leafletMapRef.current = map;
 
@@ -1946,27 +1984,47 @@ useEffect(() => {
   //         });
   //       });
 
-  //       setMapReady(true);
+  //       console.log('Map created successfully');
 
+  //       // Set ready immediately
+  //       if (mounted) {
+  //         setMapReady(true);
+  //       }
+
+  //       // Fix size and draw plots after a brief delay
   //       setTimeout(() => {
-  //         map.invalidateSize();
-  //         drawPlots();
-  //         // Setup initial layer control (will be updated when tiles load)
-  //         setupInitialLayerControl(map);
-  //       }, 100);
+  //         if (leafletMapRef.current && mounted) {
+  //           leafletMapRef.current.invalidateSize();
+  //           drawPlots();
+  //           setupInitialLayerControl(leafletMapRef.current);
+  //           console.log('Map fully initialized');
+  //         }
+  //       }, 150);
 
   //     } catch (error) {
   //       console.error('Error initializing map:', error);
-  //       toast.error('Failed to initialize map');
+  //       if (mounted) setMapReady(true); // Always hide spinner
   //     }
   //   };
 
-  //   initMap();
+  //   // Delay initialization to let DOM settle (important for React Strict Mode)
+  //   initTimer = setTimeout(() => {
+  //     if (mounted) {
+  //       initMap();
+  //     }
+  //   }, 200);
 
   //   // Cleanup
   //   return () => {
+  //     if (initTimer) clearTimeout(initTimer);
+  //     mounted = false;
+      
   //     if (leafletMapRef.current) {
-  //       leafletMapRef.current.remove();
+  //       try {
+  //         leafletMapRef.current.remove();
+  //       } catch (e) {
+  //         console.error('Error removing map:', e);
+  //       }
   //       leafletMapRef.current = null;
   //     }
   //     plotsLayerRef.current = null;
@@ -1978,92 +2036,46 @@ useEffect(() => {
   // }, [viewMode]);
   useEffect(() => {
     if (viewMode !== 'map') return;
-
+  
     let mounted = true;
-    let initTimer = null;
-
+  
     const initMap = async () => {
       try {
-        console.log('Starting map initialization...');
-
-        // Wait for container with polling
+        console.log('Starting Mapbox map initialization...');
+  
+        // Wait for container
         let attempts = 0;
         const maxAttempts = 20;
         
         while (!mapContainerRef.current && mounted && attempts < maxAttempts) {
-          console.log(`Waiting for container... attempt ${attempts + 1}/${maxAttempts}`);
           await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
         }
-
+  
         if (!mapContainerRef.current) {
-          console.error('Map container still not available after waiting');
+          console.error('Map container not available');
           if (mounted) setMapReady(true);
           return;
         }
-
-        console.log('Container found, loading Leaflet...');
-
-        // Load CSS first
-        if (!document.getElementById('leaflet-css')) {
-          const leafletCSS = document.createElement('link');
-          leafletCSS.id = 'leaflet-css';
-          leafletCSS.rel = 'stylesheet';
-          leafletCSS.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-          document.head.appendChild(leafletCSS);
-        }
-
-        if (!document.getElementById('leaflet-draw-css')) {
-          const drawCSS = document.createElement('link');
-          drawCSS.id = 'leaflet-draw-css';
-          drawCSS.rel = 'stylesheet';
-          drawCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css';
-          document.head.appendChild(drawCSS);
-        }
-
-        // Load Leaflet JS
-        if (!window.L) {
+  
+        // Load Mapbox GL JS dynamically
+        if (!window.mapboxgl) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
+          document.head.appendChild(link);
+  
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.id = 'leaflet-js';
-            script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js';
             script.onload = resolve;
             script.onerror = reject;
             document.body.appendChild(script);
           });
         }
-
-        // Load Leaflet Draw
-        if (!window.L?.Draw) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.id = 'leaflet-draw-js';
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.body.appendChild(script);
-          });
-        }
-
-        // Check if still mounted after async operations
-        if (!mounted) {
-          console.log('Component unmounted during script loading');
-          return;
-        }
-
-        // Double-check container still exists
-        if (!mapContainerRef.current) {
-          console.error('Container disappeared during script loading');
-          if (mounted) setMapReady(true);
-          return;
-        }
-
-        const L = window.L;
-        
-        if (!L) {
-          throw new Error('Leaflet failed to load');
-        }
-
+  
+        if (!mounted || !mapContainerRef.current) return;
+  
         // Clean up existing map
         if (leafletMapRef.current) {
           try {
@@ -2073,89 +2085,122 @@ useEffect(() => {
           }
           leafletMapRef.current = null;
         }
-        
-        console.log('Creating map in container...');
+  
         mapContainerRef.current.innerHTML = '';
-
-        // Define base layers
-        baseLayers.current = {
-          satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles © Esri',
-            maxZoom: 18
-          }),
-          street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-          }),
-          hybrid: L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-            maxZoom: 20,
-            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-            attribution: '© Google'
-          })
-        };
-
-        // Create map
-        const map = L.map(mapContainerRef.current, {
-          center: [20, 0],
-          zoom: 2,
-          zoomControl: true,
-          dragging: true,
-          scrollWheelZoom: true,
-          layers: [baseLayers.current.satellite]
+  
+        // Set Mapbox access token
+        window.mapboxgl.accessToken = 'pk.eyJ1IjoiZmFpcmNvZGVsYWIiLCJhIjoiY21pMzAzNDh4MHUzNTJrc2ZkNHdvdWowZCJ9.ctPB8FDsIjXa3MgFt4GVyA';
+  
+        // Initialize Mapbox map with globe projection
+        const map = new window.mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: 'mapbox://styles/mapbox/satellite-streets-v12',
+          projection: 'globe',
+          center: [0, 20],
+          zoom: 1.5,
+          pitch: 0,
+          bearing: 0
         });
-
+  
         if (!mounted) return;
-
+  
         leafletMapRef.current = map;
-
-        // Create plots layer
-        plotsLayerRef.current = L.layerGroup().addTo(map);
-        dotMarkersRef.current = [];
-
-        // Handle zoom events
-        map.on('zoomend', () => {
-          const z = map.getZoom();
-          dotMarkersRef.current.forEach(marker => {
-            if (marker.setStyle) {
-              marker.setStyle({ radius: dotRadiusForZoom(z) });
-            }
+  
+        // Configure atmosphere and stars
+        map.on('style.load', () => {
+          map.setFog({
+            'color': 'rgb(186, 210, 235)',
+            'high-color': 'rgb(36, 92, 223)',
+            'horizon-blend': 0.02,
+            'space-color': 'rgb(11, 11, 25)',
+            'star-intensity': 0.6
           });
         });
-
-        console.log('Map created successfully');
-
-        // Set ready immediately
-        if (mounted) {
-          setMapReady(true);
-        }
-
-        // Fix size and draw plots after a brief delay
-        setTimeout(() => {
-          if (leafletMapRef.current && mounted) {
-            leafletMapRef.current.invalidateSize();
-            drawPlots();
-            setupInitialLayerControl(leafletMapRef.current);
-            console.log('Map fully initialized');
+  
+        // Add navigation controls
+        map.addControl(new window.mapboxgl.NavigationControl());
+        map.addControl(new window.mapboxgl.FullscreenControl());
+  
+        // Globe rotation animation (optional - can be disabled)
+        let userInteracting = false;
+        
+        // Only enable globe rotation if there are no plots yet
+        const enableGlobeRotation = () => {
+          if (rotationIntervalRef.current) return; // Already running
+          
+          const spinGlobe = () => {
+            if (!userInteracting && !map.getSource('farm-boundary') && !map.getSource('farm-points')) {
+              const center = map.getCenter();
+              center.lng -= 0.2;
+              map.easeTo({ center, duration: 100, easing: (n) => n });
+            } else {
+              // Stop rotation if plots are being drawn
+              if (rotationIntervalRef.current) {
+                clearInterval(rotationIntervalRef.current);
+                rotationIntervalRef.current = null;
+              }
+            }
+          };
+          
+          rotationIntervalRef.current = setInterval(spinGlobe, 100);
+        };
+  
+        map.on('mousedown', () => { userInteracting = true; });
+        map.on('dragstart', () => { userInteracting = true; });
+        map.on('moveend', () => { userInteracting = false; });
+  
+        // Wait for map to load before drawing plots
+        map.once('load', () => {
+          if (mounted) {
+            setMapReady(true);
+            
+            // Start globe rotation only briefly (1 second) if no plots exist
+            // This gives a nice initial animation
+            if (landPlots.length === 0) {
+              enableGlobeRotation();
+              setTimeout(() => {
+                if (rotationIntervalRef.current) {
+                  clearInterval(rotationIntervalRef.current);
+                  rotationIntervalRef.current = null;
+                }
+              }, 1000);
+            }
+            
+            // Draw plots immediately when map is ready
+            // Ensure style is loaded before drawing
+            if (map.isStyleLoaded()) {
+              drawPlots();
+            } else {
+              map.once('style.load', () => {
+                drawPlots();
+              });
+            }
           }
-        }, 150);
-
+        });
+  
+        console.log('Mapbox map created successfully');
+  
       } catch (error) {
-        console.error('Error initializing map:', error);
-        if (mounted) setMapReady(true); // Always hide spinner
+        console.error('Error initializing Mapbox map:', error);
+        if (mounted) setMapReady(true);
       }
     };
-
-    // Delay initialization to let DOM settle (important for React Strict Mode)
-    initTimer = setTimeout(() => {
+  
+    const initTimer = setTimeout(() => {
       if (mounted) {
         initMap();
       }
     }, 200);
-
-    // Cleanup
+  
     return () => {
-      if (initTimer) clearTimeout(initTimer);
       mounted = false;
+      if (initTimer) clearTimeout(initTimer);
+      
+      // Stop globe rotation
+      if (rotationIntervalRef.current) {
+        clearInterval(rotationIntervalRef.current);
+        rotationIntervalRef.current = null;
+      }
       
       if (leafletMapRef.current) {
         try {
@@ -2165,22 +2210,11 @@ useEffect(() => {
         }
         leafletMapRef.current = null;
       }
-      plotsLayerRef.current = null;
-      dotMarkersRef.current = [];
-      treeCoverLayerRef.current = null;
-      deforestationLayerRef.current = null;
       setMapReady(false);
     };
   }, [viewMode]);
+  
 
-
-
-  // Redraw plots when data changes
-  // useEffect(() => {
-  //   if (mapReady && leafletMapRef.current) {
-  //     drawPlots();
-  //   }
-  // }, [landPlots, mapReady]);
   useEffect(() => {
     if (mapReady && leafletMapRef.current && viewMode === 'map') {
       console.log('Land plots updated, redrawing...', landPlots.length);
@@ -2188,13 +2222,19 @@ useEffect(() => {
       // Small delay to ensure state is settled
       setTimeout(() => {
         if (leafletMapRef.current && mapReady) {
-          // Invalidate size first in case container changed
-          leafletMapRef.current.invalidateSize();
-          
-          // Redraw plots
-          drawPlots();
-          
-          console.log('Plots redrawn successfully');
+          // Check if map style is loaded (Mapbox requirement)
+          const map = leafletMapRef.current;
+          if (map.isStyleLoaded()) {
+            // Redraw plots
+            drawPlots();
+            console.log('Plots redrawn successfully');
+          } else {
+            // Wait for style to load
+            map.once('style.load', () => {
+              drawPlots();
+              console.log('Plots redrawn successfully after style load');
+            });
+          }
         }
       }, 100);
     }
@@ -2294,23 +2334,151 @@ useEffect(() => {
   };
 
   /* ---------------- Map renderer ---------------- */
-  function drawPlots() {
-    const L = window.L;
-    const map = leafletMapRef.current;
-    const layer = plotsLayerRef.current;
+  // function drawPlots() {
+  //   const L = window.L;
+  //   const map = leafletMapRef.current;
+  //   const layer = plotsLayerRef.current;
     
-    if (!L || !map || !layer || !mapReady) {
+  //   if (!L || !map || !layer || !mapReady) {
+  //     console.log('Map not ready for plotting');
+  //     return;
+  //   }
+
+  //   console.log('Drawing plots:', landPlots.length);
+
+  //   layer.clearLayers();
+  //   dotMarkersRef.current = [];
+
+  //   const allBounds = [];
+
+  //   landPlots.forEach(plot => {
+  //     let coordinates;
+      
+  //     if (plot.coordinates) {
+  //       if (typeof plot.coordinates === 'string') {
+  //         try {
+  //           coordinates = JSON.parse(plot.coordinates);
+  //         } catch {
+  //           coordinates = [];
+  //         }
+  //       } else {
+  //         coordinates = plot.coordinates;
+  //       }
+  //     } else if (plot.geojson?.coordinates) {
+  //       if (plot.geojson.type === 'Point') {
+  //         coordinates = [plot.geojson.coordinates];
+  //       } else if (plot.geojson.coordinates[0]?.length) {
+  //         coordinates = plot.geojson.coordinates[0];
+  //       }
+  //     } else if (plot.longitude != null && plot.latitude != null) {
+  //       coordinates = [[plot.longitude, plot.latitude]];
+  //     } else {
+  //       return;
+  //     }
+
+  //     if (!coordinates || coordinates.length === 0) return;
+
+  //     const latLngs = coordinates.map(([lng, lat]) => [lat, lng]);
+  //     const isSinglePoint = latLngs.length === 1;
+
+
+  //     let productsDisplay = '';
+  //     if (Array.isArray(plot.products)) {
+  //       productsDisplay = plot.products.join(', ');
+  //     } else if (Array.isArray(plot.commodities)) {
+  //       productsDisplay = plot.commodities.join(', ');
+  //     } else if (typeof plot.commodities === 'string') {
+  //       productsDisplay = plot.commodities;
+  //     }
+
+  //     const popupHtml = `
+  //       <div style="font-size:14px">
+  //         <strong style="color:#2E7D32;font-size:16px">${plot.plot_id || plot.id}</strong><br/>
+  //         <strong>${plot.plot_name || plot.name || 'Unnamed Plot'}</strong><br/>
+  //         Country: ${plot.country || 'Unknown'}<br/>
+  //         Products: ${productsDisplay || 'None'}<br/>
+  //         Area: ${plot.area || 0} hectares
+  //       </div>
+  //     `;
+
+  //     if (isSinglePoint) {
+  //       const [lat, lng] = latLngs[0];
+  //       const dot = L.circleMarker([lat, lng], { ...styles.pointDot(map.getZoom()) }).addTo(layer);
+  //       dotMarkersRef.current.push(dot);
+  //       L.circle([lat, lng], { radius: POINT_RING_METERS, ...styles.pointRing, interactive: false }).addTo(layer);
+
+  //       dot.bindTooltip(`<strong>${plot.plot_id || plot.id}</strong><br/>${plot.plot_name || plot.name || 'Unnamed Plot'}`, { sticky: true });
+  //       dot.bindPopup(popupHtml);
+
+  //       allBounds.push([lat, lng]);
+  //       return;
+  //     }
+
+  //     // Multi-point polygon
+  //     L.polygon(latLngs, { ...styles.polygonGlow, interactive: false }).addTo(layer);
+  //     const polygon = L.polygon(latLngs, styles.polygon).addTo(layer);
+
+  //     polygon.bindTooltip(`<strong>${plot.plot_id || plot.id}</strong><br/>${plot.plot_name || plot.name || 'Unnamed Plot'}`, { sticky: true });
+  //     polygon.bindPopup(popupHtml);
+
+  //     polygon.on('click', function () {
+  //       map.fitBounds(this.getBounds(), { padding: [50, 50] });
+  //     });
+
+  //     const center = centroidLatLng(latLngs);
+  //     if (center) {
+  //       const dot = L.circleMarker(center, styles.pointDot(map.getZoom())).addTo(layer);
+  //       dotMarkersRef.current.push(dot);
+  //       L.circle(center, { radius: POINT_RING_METERS, ...styles.pointRing, interactive: false }).addTo(layer);
+  //     }
+
+  //     allBounds.push(...latLngs);
+  //   });
+
+  //   if (allBounds.length) {
+  //     try { 
+  //       map.fitBounds(allBounds, { padding: [50, 50] }); 
+  //     } catch (error) {
+  //       console.warn('Error fitting bounds:', error);
+  //     }
+  //   }
+  // }
+  function drawPlots() {
+    const map = leafletMapRef.current;
+    
+    if (!map || !mapReady || !window.mapboxgl) {
       console.log('Map not ready for plotting');
       return;
     }
-
+  
     console.log('Drawing plots:', landPlots.length);
-
-    layer.clearLayers();
-    dotMarkersRef.current = [];
-
-    const allBounds = [];
-
+  
+    // Check if map style is loaded before adding layers
+    if (!map.isStyleLoaded()) {
+      console.log('Map style not loaded yet, waiting...');
+      map.once('style.load', () => {
+        drawPlots();
+      });
+      return;
+    }
+  
+    // Remove existing layers and sources
+    if (map.getLayer('farm-boundary-glow')) map.removeLayer('farm-boundary-glow');
+    if (map.getLayer('farm-boundary-fill')) map.removeLayer('farm-boundary-fill');
+    if (map.getLayer('farm-boundary-outline')) map.removeLayer('farm-boundary-outline');
+    if (map.getLayer('farm-points')) map.removeLayer('farm-points');
+    if (map.getSource('farm-boundary')) map.removeSource('farm-boundary');
+    if (map.getSource('farm-points')) map.removeSource('farm-points');
+    
+    // Remove existing event listeners to prevent duplicates
+    map.off('click', 'farm-boundary-fill');
+    map.off('mouseenter', 'farm-boundary-fill');
+    map.off('mouseleave', 'farm-boundary-fill');
+  
+    const allFeatures = [];
+    const pointFeatures = [];
+    const bounds = new window.mapboxgl.LngLatBounds();
+  
     landPlots.forEach(plot => {
       let coordinates;
       
@@ -2335,13 +2503,11 @@ useEffect(() => {
       } else {
         return;
       }
-
+  
       if (!coordinates || coordinates.length === 0) return;
-
-      const latLngs = coordinates.map(([lng, lat]) => [lat, lng]);
-      const isSinglePoint = latLngs.length === 1;
-
-
+  
+      const isSinglePoint = coordinates.length === 1;
+  
       let productsDisplay = '';
       if (Array.isArray(plot.products)) {
         productsDisplay = plot.products.join(', ');
@@ -2350,59 +2516,204 @@ useEffect(() => {
       } else if (typeof plot.commodities === 'string') {
         productsDisplay = plot.commodities;
       }
-
-      const popupHtml = `
-        <div style="font-size:14px">
-          <strong style="color:#2E7D32;font-size:16px">${plot.plot_id || plot.id}</strong><br/>
-          <strong>${plot.plot_name || plot.name || 'Unnamed Plot'}</strong><br/>
-          Country: ${plot.country || 'Unknown'}<br/>
-          Products: ${productsDisplay || 'None'}<br/>
-          Area: ${plot.area || 0} hectares
-        </div>
-      `;
-
+  
       if (isSinglePoint) {
-        const [lat, lng] = latLngs[0];
-        const dot = L.circleMarker([lat, lng], { ...styles.pointDot(map.getZoom()) }).addTo(layer);
-        dotMarkersRef.current.push(dot);
-        L.circle([lat, lng], { radius: POINT_RING_METERS, ...styles.pointRing, interactive: false }).addTo(layer);
-
-        dot.bindTooltip(`<strong>${plot.plot_id || plot.id}</strong><br/>${plot.plot_name || plot.name || 'Unnamed Plot'}`, { sticky: true });
-        dot.bindPopup(popupHtml);
-
-        allBounds.push([lat, lng]);
-        return;
+        // Single point
+        const [lng, lat] = coordinates[0];
+        pointFeatures.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [lng, lat]
+          },
+          properties: {
+            plot_id: plot.plot_id || plot.id,
+            plot_name: plot.plot_name || plot.name || 'Unnamed Plot',
+            country: plot.country || 'Unknown',
+            products: productsDisplay || 'None',
+            area: plot.area || 0
+          }
+        });
+        bounds.extend([lng, lat]);
+      } else {
+        // Polygon
+        allFeatures.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [coordinates]
+          },
+          properties: {
+            plot_id: plot.plot_id || plot.id,
+            plot_name: plot.plot_name || plot.name || 'Unnamed Plot',
+            country: plot.country || 'Unknown',
+            products: productsDisplay || 'None',
+            area: plot.area || 0
+          }
+        });
+  
+        // Calculate centroid for point marker
+        let lngSum = 0, latSum = 0;
+        coordinates.forEach(([lng, lat]) => {
+          lngSum += lng;
+          latSum += lat;
+          bounds.extend([lng, lat]);
+        });
+        const centerLng = lngSum / coordinates.length;
+        const centerLat = latSum / coordinates.length;
+  
+        pointFeatures.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [centerLng, centerLat]
+          },
+          properties: {
+            plot_id: plot.plot_id || plot.id,
+            plot_name: plot.plot_name || plot.name || 'Unnamed Plot'
+          }
+        });
       }
-
-      // Multi-point polygon
-      L.polygon(latLngs, { ...styles.polygonGlow, interactive: false }).addTo(layer);
-      const polygon = L.polygon(latLngs, styles.polygon).addTo(layer);
-
-      polygon.bindTooltip(`<strong>${plot.plot_id || plot.id}</strong><br/>${plot.plot_name || plot.name || 'Unnamed Plot'}`, { sticky: true });
-      polygon.bindPopup(popupHtml);
-
-      polygon.on('click', function () {
-        map.fitBounds(this.getBounds(), { padding: [50, 50] });
-      });
-
-      const center = centroidLatLng(latLngs);
-      if (center) {
-        const dot = L.circleMarker(center, styles.pointDot(map.getZoom())).addTo(layer);
-        dotMarkersRef.current.push(dot);
-        L.circle(center, { radius: POINT_RING_METERS, ...styles.pointRing, interactive: false }).addTo(layer);
-      }
-
-      allBounds.push(...latLngs);
     });
-
-    if (allBounds.length) {
-      try { 
-        map.fitBounds(allBounds, { padding: [50, 50] }); 
+  
+    // Add polygon source and layers
+    if (allFeatures.length > 0) {
+      try {
+        map.addSource('farm-boundary', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: allFeatures
+          }
+        });
+        console.log('Added farm-boundary source with', allFeatures.length, 'features');
+  
+        // Glow effect layer (outline) - added first so it appears behind
+        map.addLayer({
+          id: 'farm-boundary-glow',
+          type: 'line',
+          source: 'farm-boundary',
+          paint: {
+            'line-color': '#6fc3faff',
+            'line-width': 6,
+            'line-opacity': 0.1
+          }
+        });
+  
+        // Fill layer
+        map.addLayer({
+          id: 'farm-boundary-fill',
+          type: 'fill',
+          source: 'farm-boundary',
+          paint: {
+            'fill-color': '#FFFF00',
+            'fill-opacity': 0.3
+          }
+        });
+  
+        // Outline layer - added last so it appears on top
+        map.addLayer({
+          id: 'farm-boundary-outline',
+          type: 'line',
+          source: 'farm-boundary',
+          paint: {
+            'line-color': '#0035f5ff',
+            'line-width': 2
+          }
+        });
+        console.log('Added farm-boundary layers successfully');
       } catch (error) {
-        console.warn('Error fitting bounds:', error);
+        console.error('Error adding farm-boundary layers:', error);
+      }
+  
+      // Add click popup (only add if layer exists)
+      if (map.getLayer('farm-boundary-fill')) {
+        map.on('click', 'farm-boundary-fill', (e) => {
+          const props = e.features[0].properties;
+          const popupHtml = `
+            <div style="font-size:14px">
+              <strong style="color:#2E7D32;font-size:16px">${props.plot_id}</strong><br/>
+              <strong>${props.plot_name}</strong><br/>
+              Country: ${props.country}<br/>
+              Products: ${props.products}<br/>
+              Area: ${props.area} hectares
+            </div>
+          `;
+          
+          new window.mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(popupHtml)
+            .addTo(map);
+        });
+  
+        // Cursor pointer on hover
+        map.on('mouseenter', 'farm-boundary-fill', () => {
+          map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', 'farm-boundary-fill', () => {
+          map.getCanvas().style.cursor = '';
+        });
       }
     }
+  
+    // Add point markers
+    if (pointFeatures.length > 0) {
+      try {
+        map.addSource('farm-points', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: pointFeatures
+          }
+        });
+        console.log('Added farm-points source with', pointFeatures.length, 'features');
+  
+        map.addLayer({
+          id: 'farm-points',
+          type: 'circle',
+          source: 'farm-points',
+          paint: {
+            'circle-radius': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              3, 8,
+              10, 12,
+              15, 18
+            ],
+            'circle-color': '#90CAF9',
+            'circle-stroke-color': '#1E88E5',
+            'circle-stroke-width': 2
+          }
+        });
+        console.log('Added farm-points layer successfully');
+      } catch (error) {
+        console.error('Error adding farm-points layer:', error);
+      }
+    }
+  
+    // Fit bounds and fly to plots
+    if (!bounds.isEmpty()) {
+      // Stop any globe rotation
+      if (rotationIntervalRef.current) {
+        clearInterval(rotationIntervalRef.current);
+        rotationIntervalRef.current = null;
+      }
+      
+      // Use fitBounds with smooth animation to focus on plots
+      map.fitBounds(bounds, {
+        padding: { top: 50, bottom: 50, left: 50, right: 50 },
+        maxZoom: 16,
+        duration: 2000, // 2 second smooth transition
+        essential: true
+      });
+      
+      console.log('Fitting bounds to plots');
+    } else {
+      console.log('No bounds to fit - no plots with valid coordinates');
+    }
   }
+  
 
   /* -------- Rest of your existing handler functions remain the same -------- */
   const handleSync = async () => {
@@ -2572,54 +2883,54 @@ useEffect(() => {
 };
 
 
-  const startDrawing = () => {
-    const L = window.L;
-    const map = leafletMapRef.current;
+  // const startDrawing = () => {
+  //   const L = window.L;
+  //   const map = leafletMapRef.current;
     
-    if (!L || !map) {
-      toast.error('Map is not ready yet.');
-      return;
-    }
+  //   if (!L || !map) {
+  //     toast.error('Map is not ready yet.');
+  //     return;
+  //   }
     
-    if (!L.Draw) {
-      toast.error('Drawing tools are not loaded yet. Please try again in a moment.');
-      return;
-    }
+  //   if (!L.Draw) {
+  //     toast.error('Drawing tools are not loaded yet. Please try again in a moment.');
+  //     return;
+  //   }
 
-    setIsDrawing(true);
-    setDrawnCoordinates([]);
+  //   setIsDrawing(true);
+  //   setDrawnCoordinates([]);
 
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
+  //   const drawnItems = new L.FeatureGroup();
+  //   map.addLayer(drawnItems);
 
-    const drawControl = new L.Control.Draw({
-      position: 'topright',
-      draw: {
-        polygon: {
-          allowIntersection: false,
-          drawError: { color: '#e1e100', message: '<strong>Error:</strong> Shape edges cannot cross!' },
-          shapeOptions: { color: '#2E7D32' }
-        },
-        polyline: false,
-        circle: false,
-        rectangle: false,
-        marker: false,
-        circlemarker: false
-      },
-      edit: { featureGroup: drawnItems }
-    });
-    map.addControl(drawControl);
+  //   const drawControl = new L.Control.Draw({
+  //     position: 'topright',
+  //     draw: {
+  //       polygon: {
+  //         allowIntersection: false,
+  //         drawError: { color: '#e1e100', message: '<strong>Error:</strong> Shape edges cannot cross!' },
+  //         shapeOptions: { color: '#2E7D32' }
+  //       },
+  //       polyline: false,
+  //       circle: false,
+  //       rectangle: false,
+  //       marker: false,
+  //       circlemarker: false
+  //     },
+  //     edit: { featureGroup: drawnItems }
+  //   });
+  //   map.addControl(drawControl);
 
-    map.once(L.Draw.Event.CREATED, (e) => {
-      const layer = e.layer;
-      drawnItems.addLayer(layer);
-      const coords = layer.getLatLngs()[0].map(latlng => [latlng.lng, latlng.lat]);
-      setDrawnCoordinates(coords);
-      map.removeControl(drawControl);
-      setIsDrawing(false);
-      setDrawDialog(true);
-    });
-  };
+  //   map.once(L.Draw.Event.CREATED, (e) => {
+  //     const layer = e.layer;
+  //     drawnItems.addLayer(layer);
+  //     const coords = layer.getLatLngs()[0].map(latlng => [latlng.lng, latlng.lat]);
+  //     setDrawnCoordinates(coords);
+  //     map.removeControl(drawControl);
+  //     setIsDrawing(false);
+  //     setDrawDialog(true);
+  //   });
+  // };
 
   const calculateArea = () => Math.round(Math.random() * 100 + 10);
 
@@ -2723,6 +3034,72 @@ useEffect(() => {
       console.error('Import error:', error);
     }
   };
+  const changeBaseMap = (style) => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+  
+    const styles = {
+      satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+      street: 'mapbox://styles/mapbox/streets-v12',
+      hybrid: 'mapbox://styles/mapbox/satellite-streets-v12'
+    };
+  
+    map.setStyle(styles[style]);
+    
+    // Redraw plots after style loads
+    map.once('style.load', () => {
+      drawPlots();
+    });
+  };
+  // Load Mapbox GL Draw
+const loadMapboxDraw = async () => {
+  if (!window.MapboxDraw) {
+    const link = document.createElement('link');
+    link.href = 'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  }
+};
+
+const startDrawing = async () => {
+  const map = leafletMapRef.current;
+  
+  if (!map || !window.mapboxgl) {
+    toast.error('Map is not ready yet.');
+    return;
+  }
+
+  await loadMapboxDraw();
+
+  const draw = new window.MapboxDraw({
+    displayControlsDefault: false,
+    controls: {
+      polygon: true,
+      trash: true
+    }
+  });
+
+  map.addControl(draw);
+  setIsDrawing(true);
+
+  map.on('draw.create', (e) => {
+    const coords = e.features[0].geometry.coordinates[0];
+    setDrawnCoordinates(coords);
+    map.removeControl(draw);
+    setIsDrawing(false);
+    setDrawDialog(true);
+  });
+};
+
+  
 
   const commodityOptions = ['Coffee', 'Cocoa', 'Palm Oil', 'Rubber', 'Wood', 'Soy', 'Cattle', 'Cardamom'];
   const countryOptions = ['Brazil', 'India', 'Ghana', 'Indonesia', 'Vietnam', 'Colombia'];
@@ -2835,40 +3212,7 @@ useEffect(() => {
             )}
           </Paper>
 
-          {/* Summary table under map */}
-          {/* <TableContainer component={Paper}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Plot ID</TableCell>
-                  <TableCell>Plot Name</TableCell>
-                  <TableCell>Country</TableCell>
-                  <TableCell>Area (ha)</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {landPlots.map((plot) => (
-                  <TableRow key={plot.name}>
-                    <TableCell>{plot.plot_id}</TableCell>
-                    <TableCell>{plot.plot_name}</TableCell>
-                    <TableCell>{plot.country}</TableCell>
-                    <TableCell>{plot.area}</TableCell>
-                    <TableCell>
-                      <IconButton size="small" onClick={() => handleEdit(plot)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(plot)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer> */}
-          {/* Summary table under map */}
-           {/* ADD THIS BULK ACTIONS BAR */}
+          
           {selectedPlots.length > 0 && (
             <Paper sx={{ p: 2, mb: 2, display: 'flex', alignItems: 'center', gap: 2, bgcolor: '#e3f2fd' }}>
               <Typography variant="body1" fontWeight="bold">
@@ -2943,102 +3287,7 @@ useEffect(() => {
         </Box>
       )}
 
-      {/* Table View */}
-{/* {viewMode === 'table' && (
-  <TableContainer component={Paper}>
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableCell>Plot ID</TableCell>
-          <TableCell>Name</TableCell>
-          <TableCell>Country</TableCell>
-          <TableCell>Commodities</TableCell>
-          <TableCell>Area (ha)</TableCell>
-          <TableCell>Coordinates</TableCell>
-          <TableCell>Actions</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {landPlots.map((plot) => (
-          <TableRow key={plot.name}>
-            <TableCell>{plot.plot_id}</TableCell>
-            <TableCell>{plot.plot_name}</TableCell>
-            <TableCell>{plot.country}</TableCell>
-            <TableCell>
-              {(() => {
-                let commoditiesList = [];
-                if (Array.isArray(plot.commodities)) {
-                  commoditiesList = plot.commodities;
-                } else if (typeof plot.commodities === 'string' && plot.commodities) {
-                  commoditiesList = plot.commodities.split(',');
-                }
-                return commoditiesList.map(c => (
-                  <Chip key={c} label={c.trim()} size="small" sx={{ mr: 0.5 }} />
-                ));
-              })()}
-            </TableCell>
-            <TableCell>{plot.area}</TableCell>
-            <TableCell>
-              <IconButton
-                size="small"
-                onClick={() => {
-                  let coords = [];
-                  if (plot.coordinates) {
-                    if (typeof plot.coordinates === 'string') {
-                      try {
-                        coords = JSON.parse(plot.coordinates);
-                      } catch {
-                        coords = [];
-                      }
-                    } else {
-                      coords = plot.coordinates;
-                    }
-                  } else if (plot.longitude && plot.latitude) {
-                    coords = [[plot.longitude, plot.latitude]];
-                  }
-                  setCoordData(coords);
-                  setCoordDialogOpen(true);
-                }}
-              >
-                <GpsFixedIcon />
-              </IconButton>
-              {(() => {
-                let coords = [];
-                if (plot.coordinates) {
-                  if (typeof plot.coordinates === 'string') {
-                    try {
-                      coords = JSON.parse(plot.coordinates);
-                    } catch {
-                      coords = [];
-                    }
-                  } else {
-                    coords = plot.coordinates;
-                  }
-                } else if (plot.longitude && plot.latitude) {
-                  coords = [[plot.longitude, plot.latitude]];
-                }
-                
-                // For polygons (multiple points), subtract 1 to exclude closing point
-                // For single points, keep as is
-                const displayCount = coords.length > 1 ? coords.length - 1 : coords.length;
-                return coords.length > 0 ? `${displayCount} points` : '1 point';
-              })()}
-            </TableCell>
-            <TableCell>
-              <IconButton size="small" onClick={() => handleEdit(plot)}>
-                <EditIcon />
-              </IconButton>
-              <IconButton size="small" onClick={() => handleDelete(plot)}>
-                <DeleteIcon />
-              </IconButton>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </TableContainer>
-)} */}
-{/* Table View */}
+     
 {viewMode === 'table' && (
   <Box>
     {/* Bulk Actions Bar */}

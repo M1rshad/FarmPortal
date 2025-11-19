@@ -849,11 +849,15 @@ const SharedPlotsMap = () => {
     loadGlobalTileUrls();
   }, [requestId]);
 
-  useEffect(() => {
-    if (sharedPlots.length > 0) {
-      initializeMap();
-    }
-  }, [sharedPlots]);
+useEffect(() => {
+  if (sharedPlots.length === 0) return;
+
+  if (!leafletMapRef.current) {
+    initializeMap();
+  } else if (mapReady) {
+    drawPlots();
+  }
+}, [sharedPlots, mapReady]);
 
   useEffect(() => {
     if (mapReady && leafletMapRef.current && globalTileUrls) {
@@ -1018,11 +1022,34 @@ const SharedPlotsMap = () => {
     sharedPlots.forEach(plot => {
       let coordinates = [];
 
+      // Prefer explicit coordinates if provided
       try {
-        coordinates = typeof plot.coordinates === 'string'
-          ? JSON.parse(plot.coordinates)
-          : plot.coordinates || [];
-      } catch { coordinates = []; }
+        if (plot.coordinates) {
+          coordinates = typeof plot.coordinates === 'string'
+            ? JSON.parse(plot.coordinates)
+            : plot.coordinates || [];
+        }
+      } catch {
+        coordinates = [];
+      }
+
+      // Fall back to GeoJSON payloads
+      if (coordinates.length === 0 && plot.geojson?.coordinates) {
+        if (plot.geojson.type === 'Point') {
+          coordinates = [plot.geojson.coordinates];
+        } else if (Array.isArray(plot.geojson.coordinates[0])) {
+          coordinates = plot.geojson.coordinates[0];
+        }
+      }
+
+      // Final fallback to simple lat/lng fields
+      if (
+        coordinates.length === 0 &&
+        plot.longitude != null &&
+        plot.latitude != null
+      ) {
+        coordinates = [[plot.longitude, plot.latitude]];
+      }
 
       if (coordinates.length === 0) return;
 
