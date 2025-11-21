@@ -394,6 +394,7 @@ const RiskDashboard = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [expandedSupplier, setExpandedSupplier] = useState(null);
   const [plotDetailsDialog, setPlotDetailsDialog] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [selectedPlots, setSelectedPlots] = useState([]);
   const [riskData, setRiskData] = useState({
     suppliers: [],
@@ -428,22 +429,6 @@ const RiskDashboard = () => {
     }
   };
 
-  const runRiskAnalysis = async () => {
-    try {
-      setAnalyzing(true);
-      await riskService.trigger();
-      toast.success('Risk analysis completed successfully');
-      setTimeout(() => {
-        fetchRiskData();
-      }, 1000);
-    } catch (error) {
-      console.error('Risk analysis failed:', error);
-      toast.error('Risk analysis failed');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
   const getRiskColor = (level) => {
     switch (level) {
       case 'high': return 'error';
@@ -466,12 +451,27 @@ const RiskDashboard = () => {
     setExpandedSupplier(expandedSupplier === supplierName ? null : supplierName);
   };
 
-  const handleViewSharedPlots = (requestId) => {
-    navigate(`/shared-plots/${requestId}`);
+  const handleViewSupplierPlots = (supplier) => {
+    if (!supplier) return;
+
+    const requestId = supplier.requests?.[0]?.id || supplier.supplier_id || supplier.name || supplier.supplier_name || 'supplier';
+
+    navigate(`/shared-plots/${requestId}`, {
+      state: {
+        plots: supplier.shared_plots || [],
+        supplierName: supplier.supplier_name,
+        supplierGroup: supplier.supplier_group,
+        supplierId: supplier.supplier_id,
+        requestId,
+        source: 'risk-dashboard'
+      }
+    });
   };
 
-  const handlePlotDetails = (plots) => {
-    setSelectedPlots(plots);
+  const handlePlotDetails = (supplier) => {
+    if (!supplier) return;
+    setSelectedPlots(supplier.shared_plots || []);
+    setSelectedSupplier(supplier);
     setPlotDetailsDialog(true);
   };
 
@@ -496,14 +496,6 @@ const RiskDashboard = () => {
             onClick={fetchRiskData}
           >
             Refresh
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AssessmentIcon />}
-            onClick={runRiskAnalysis}
-            disabled={analyzing}
-          >
-            {analyzing ? 'Analyzing...' : 'Run Risk Analysis'}
           </Button>
         </Box>
       </Box>
@@ -584,15 +576,6 @@ const RiskDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Risk Analysis Progress */}
-      {analyzing && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            Running EUDR compliance analysis...
-          </Typography>
-          <LinearProgress />
-        </Alert>
-      )}
 
       {/* High Risk Alert */}
       {riskData.summary.high_risk > 0 && (
@@ -684,7 +667,7 @@ const RiskDashboard = () => {
                         label={`${supplier.shared_plots.length} plots`}
                         variant="outlined"
                         size="small"
-                        onClick={() => handlePlotDetails(supplier.shared_plots)}
+                        onClick={() => handlePlotDetails(supplier)}
                         clickable
                       />
                     </TableCell>
@@ -706,7 +689,7 @@ const RiskDashboard = () => {
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <IconButton
                           size="small"
-                          onClick={() => handleViewSharedPlots(supplier.requests[0]?.id)}
+                          onClick={() => handleViewSupplierPlots(supplier)}
                           title="View on Map"
                         >
                           <MapIcon />
@@ -767,7 +750,7 @@ const RiskDashboard = () => {
                                     <Button
                                       size="small"
                                       startIcon={<MapIcon />}
-                                      onClick={() => handleViewSharedPlots(plot.request_id)}
+                                      onClick={() => handleViewSupplierPlots(supplier)}
                                       sx={{ mt: 1 }}
                                     >
                                       View Map
@@ -798,16 +781,24 @@ const RiskDashboard = () => {
       </Paper>
 
       {/* Plot Details Dialog */}
-      <Dialog open={plotDetailsDialog} onClose={() => setPlotDetailsDialog(false)} maxWidth="md" fullWidth>
+      <Dialog 
+        open={plotDetailsDialog} 
+        onClose={() => {
+          setPlotDetailsDialog(false);
+          setSelectedSupplier(null);
+        }} 
+        maxWidth="md" 
+        fullWidth
+      >
         <DialogTitle>Land Plot Details</DialogTitle>
         <DialogContent>
           <TableContainer>
             <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Plot ID</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Area (ha)</TableCell>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Plot ID</TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Area (ha)</TableCell>
                   <TableCell>Risk Level</TableCell>
                   <TableCell>Deforestation</TableCell>
                   <TableCell>Actions</TableCell>
@@ -838,7 +829,7 @@ const RiskDashboard = () => {
                     <TableCell>
                       <IconButton
                         size="small"
-                        onClick={() => handleViewSharedPlots(plot.request_id)}
+                        onClick={() => selectedSupplier && handleViewSupplierPlots(selectedSupplier)}
                       >
                         <MapIcon />
                       </IconButton>
@@ -850,7 +841,10 @@ const RiskDashboard = () => {
           </TableContainer>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPlotDetailsDialog(false)}>Close</Button>
+          <Button onClick={() => {
+            setPlotDetailsDialog(false);
+            setSelectedSupplier(null);
+          }}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

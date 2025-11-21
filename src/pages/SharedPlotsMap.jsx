@@ -1249,7 +1249,7 @@
 // export default SharedPlotsMap;
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -1275,6 +1275,8 @@ const MAPBOX_TOKEN = 'pk.eyJ1IjoiZmFpcmNvZGVsYWIiLCJhIjoiY21pMzAzNDh4MHUzNTJrc2Z
 const SharedPlotsMap = () => {
   const { requestId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state;
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const popupRef = useRef(null);
@@ -1288,9 +1290,23 @@ const SharedPlotsMap = () => {
   const [layersLoading, setLayersLoading] = useState(false);
 
   useEffect(() => {
-    fetchSharedPlots();
     loadGlobalTileUrls();
-  }, [requestId]);
+    const plotsFromState = locationState?.plots;
+
+    if (Array.isArray(plotsFromState)) {
+      setSharedPlots(plotsFromState);
+      setRequestInfo({
+        id: locationState.requestId || requestId,
+        supplier_name: locationState.supplierName,
+        supplier_group: locationState.supplierGroup,
+        supplier_id: locationState.supplierId
+      });
+      setLoading(false);
+      return;
+    }
+
+    fetchSharedPlots();
+  }, [requestId, locationState]);
 
   // Initialize map when plots are loaded
   useEffect(() => {
@@ -2173,12 +2189,15 @@ const SharedPlotsMap = () => {
     );
   }
 
+  const backDestination = locationState?.source === 'risk-dashboard' ? '/risk-dashboard' : '/requests';
+  const backLabel = locationState?.source === 'risk-dashboard' ? 'Back to Risk Dashboard' : 'Back to Requests';
+
   if (!requestInfo) {
     return (
       <Box p={3}>
         <Alert severity="error">Request not found</Alert>
-        <Button onClick={() => navigate('/requests')} sx={{ mt: 2 }}>
-          Back to Requests
+        <Button onClick={() => navigate(backDestination)} sx={{ mt: 2 }}>
+          {backLabel}
         </Button>
       </Box>
     );
@@ -2187,11 +2206,11 @@ const SharedPlotsMap = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/requests')} sx={{ mr: 2 }}>
-          Back to Requests
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(backDestination)} sx={{ mr: 2 }}>
+          {backLabel}
         </Button>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Shared Land Plots - {requestInfo.id}
+          Shared Land Plots - {requestInfo.supplier_name || requestInfo.id}
         </Typography>
       </Box>
 
