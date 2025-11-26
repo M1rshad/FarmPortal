@@ -1251,21 +1251,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  CircularProgress,
-  Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip
+  Box, Paper, Typography, Button, CircularProgress, Alert, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Chip, Fade, useTheme, Checkbox
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { ArrowBack as ArrowBackIcon, Layers as LayersIcon } from '@mui/icons-material';
 import { requestService } from '../services/requestService';
 import { landPlotService } from '../services/landPlotService';
 import { toast } from 'react-toastify';
@@ -1273,10 +1262,12 @@ import { toast } from 'react-toastify';
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZmFpcmNvZGVsYWIiLCJhIjoiY21pMzAzNDh4MHUzNTJrc2ZkNHdvdWowZCJ9.ctPB8FDsIjXa3MgFt4GVyA';
 
 const SharedPlotsMap = () => {
+  const theme = useTheme();
   const { requestId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state;
+  
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const popupRef = useRef(null);
@@ -1288,6 +1279,10 @@ const SharedPlotsMap = () => {
   const [requestInfo, setRequestInfo] = useState(null);
   const [globalTileUrls, setGlobalTileUrls] = useState(null);
   const [layersLoading, setLayersLoading] = useState(false);
+  
+  // Layer Toggles
+  const [showTreeCover, setShowTreeCover] = useState(false);
+  const [showDeforestation, setShowDeforestation] = useState(false);
 
   useEffect(() => {
     loadGlobalTileUrls();
@@ -1306,58 +1301,45 @@ const SharedPlotsMap = () => {
     }
 
     fetchSharedPlots();
+    // eslint-disable-next-line
   }, [requestId, locationState]);
 
-  // Initialize map when plots are loaded
+  // Map Init
   useEffect(() => {
     if (sharedPlots.length === 0) return;
-
     let mounted = true;
 
     const initMap = async () => {
       try {
-        console.log('Starting Mapbox map initialization...');
-
+        // Wait for container
         let attempts = 0;
-        const maxAttempts = 20;
-        
-        while (!mapContainerRef.current && mounted && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        while (!mapContainerRef.current && mounted && attempts < 20) {
+          await new Promise(r => setTimeout(r, 100));
           attempts++;
         }
-
         if (!mapContainerRef.current) {
-          console.error('Map container not available');
-          if (mounted) setMapReady(true);
-          return;
+            if (mounted) setMapReady(true);
+            return;
         }
 
-        // Load Mapbox GL JS
+        // Load Mapbox
         if (!window.mapboxgl) {
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
-          document.head.appendChild(link);
-
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.body.appendChild(script);
-          });
+          try {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
+            document.head.appendChild(link);
+            await new Promise((resolve) => {
+                const s = document.createElement('script');
+                s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js';
+                s.onload = resolve;
+                document.body.appendChild(s);
+            });
+          } catch (e) { console.error(e); }
         }
 
         if (!mounted || !mapContainerRef.current) return;
-
-        if (mapRef.current) {
-          try {
-            mapRef.current.remove();
-          } catch (e) {
-            console.error('Error removing old map:', e);
-          }
-          mapRef.current = null;
-        }
+        if (mapRef.current) mapRef.current.remove();
 
         mapContainerRef.current.innerHTML = '';
         window.mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -1368,17 +1350,12 @@ const SharedPlotsMap = () => {
           projection: 'globe',
           center: [0, 20],
           zoom: 1.5,
-          pitch: 0,
-          bearing: 0
+          attributionControl: false
         });
 
         if (!mounted) return;
-
         mapRef.current = map;
-        popupRef.current = new window.mapboxgl.Popup({
-          closeButton: true,
-          closeOnClick: false
-        });
+        popupRef.current = new window.mapboxgl.Popup({ closeButton: true, closeOnClick: false });
 
         map.on('style.load', () => {
           map.setFog({
@@ -1393,144 +1370,86 @@ const SharedPlotsMap = () => {
         map.addControl(new window.mapboxgl.NavigationControl(), 'top-right');
         map.addControl(new window.mapboxgl.FullscreenControl(), 'top-right');
 
-        // Globe rotation
-        let userInteracting = false;
-        let rotationActive = true;
-        
+        // Globe Rotation
         const spinGlobe = () => {
-          if (!userInteracting && rotationActive && map.getZoom() < 5) {
-            const center = map.getCenter();
-            center.lng -= 0.2;
-            map.easeTo({ center, duration: 100, easing: (n) => n });
-          }
+            if (map.getZoom() < 5) {
+                const center = map.getCenter();
+                center.lng -= 0.2;
+                map.easeTo({ center, duration: 100, easing: n => n });
+            }
         };
         
         const enableGlobeRotation = () => {
-          if (rotationIntervalRef.current) return;
-          rotationActive = true;
-          rotationIntervalRef.current = setInterval(spinGlobe, 100);
+            if (rotationIntervalRef.current) return;
+            rotationIntervalRef.current = setInterval(spinGlobe, 100);
         };
 
-        const disableGlobeRotation = () => {
-          rotationActive = false;
-          if (rotationIntervalRef.current) {
-            clearInterval(rotationIntervalRef.current);
-            rotationIntervalRef.current = null;
-          }
+        const stopSpin = () => {
+            if (rotationIntervalRef.current) {
+                clearInterval(rotationIntervalRef.current);
+                rotationIntervalRef.current = null;
+            }
         };
 
-        map.on('mousedown', () => { 
-          userInteracting = true; 
-          disableGlobeRotation();
-        });
-        
-        map.on('dragstart', () => { 
-          userInteracting = true; 
-          disableGlobeRotation();
-        });
-        
-        map.on('moveend', () => { 
-          userInteracting = false;
-        });
+        ['mousedown', 'dragstart'].forEach(ev => map.on(ev, stopSpin));
 
         map.once('load', () => {
-          console.log('Map loaded, ready to draw plots');
           if (mounted) {
             setMapReady(true);
-            
             enableGlobeRotation();
             setTimeout(() => {
-              disableGlobeRotation();
-              
-              if (map.isStyleLoaded()) {
-                drawPlots();
-              } else {
-                map.once('style.load', () => {
-                  drawPlots();
-                });
-              }
+                stopSpin();
+                if (map.isStyleLoaded()) drawPlots();
+                else map.once('style.load', drawPlots);
             }, 1500);
           }
         });
 
-        console.log('Mapbox map created successfully');
-
       } catch (error) {
-        console.error('Error initializing Mapbox map:', error);
+        console.error('Map init error:', error);
         if (mounted) setMapReady(true);
       }
     };
 
-    const initTimer = setTimeout(() => {
-      if (mounted) {
-        initMap();
-      }
-    }, 200);
+    const timer = setTimeout(() => { if (mounted) initMap(); }, 200);
 
     return () => {
       mounted = false;
-      if (initTimer) clearTimeout(initTimer);
-      
-      if (rotationIntervalRef.current) {
-        clearInterval(rotationIntervalRef.current);
-        rotationIntervalRef.current = null;
-      }
-      
-      if (mapRef.current) {
-        try {
-          mapRef.current.remove();
-        } catch (e) {
-          console.error('Error removing map:', e);
-        }
-        mapRef.current = null;
-      }
+      clearTimeout(timer);
+      if (rotationIntervalRef.current) clearInterval(rotationIntervalRef.current);
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
       setMapReady(false);
     };
+    // eslint-disable-next-line
   }, [sharedPlots]);
 
+  // Redraw trigger
   useEffect(() => {
     if (mapReady && mapRef.current && sharedPlots.length > 0) {
-      console.log('Shared plots updated, redrawing...', sharedPlots.length);
-      
-      setTimeout(() => {
-        if (mapRef.current && mapReady) {
-          const map = mapRef.current;
-          if (map.isStyleLoaded()) {
-            drawPlots();
-            console.log('Plots redrawn successfully');
-          } else {
-            map.once('style.load', () => {
-              drawPlots();
-              console.log('Plots redrawn successfully after style load');
-            });
-          }
-        }
-      }, 100);
+      const map = mapRef.current;
+      if (map.isStyleLoaded()) drawPlots();
+      else map.once('style.load', drawPlots);
     }
+    // eslint-disable-next-line
   }, [sharedPlots, mapReady]);
 
+  // Global Layers
   useEffect(() => {
     if (mapReady && mapRef.current && globalTileUrls) {
-      const map = mapRef.current;
-      if (map.isStyleLoaded()) {
-        addGlobalLayers();
-      } else {
-        map.once('style.load', () => {
-          addGlobalLayers();
-        });
-      }
+        const map = mapRef.current;
+        if (map.isStyleLoaded()) updateGlobalLayers();
+        else map.once('style.load', updateGlobalLayers);
     }
-  }, [mapReady, globalTileUrls]);
+    // eslint-disable-next-line
+  }, [mapReady, globalTileUrls, showTreeCover, showDeforestation]);
 
   const fetchSharedPlots = async () => {
     try {
       setLoading(true);
       const response = await requestService.getSharedPlots(requestId);
-      console.log('Fetched shared plots:', response.plots);
       setSharedPlots(response.plots || []);
       setRequestInfo(response.request || null);
     } catch (error) {
-      console.error('Error fetching shared plots:', error);
       toast.error('Failed to load shared plots');
     } finally {
       setLoading(false);
@@ -1541,10 +1460,8 @@ const SharedPlotsMap = () => {
     try {
       setLayersLoading(true);
       const tileUrls = await landPlotService.getGlobalDeforestationTiles();
-      console.log('Loaded tile URLs:', tileUrls);
       setGlobalTileUrls(tileUrls);
     } catch (error) {
-      console.error('Error loading tile URLs:', error);
       setGlobalTileUrls(null);
     } finally {
       setLayersLoading(false);
@@ -1553,756 +1470,294 @@ const SharedPlotsMap = () => {
 
   const drawPlots = () => {
     const map = mapRef.current;
-    if (!map || !mapReady) {
-      console.log('Map not ready for drawing');
-      return;
-    }
+    if (!map || !mapReady || !map.isStyleLoaded()) return;
 
-    if (!map.isStyleLoaded()) {
-      console.log('Style not loaded, waiting...');
-      map.once('styledata', drawPlots);
-      return;
-    }
-
-    console.log('Drawing plots...', sharedPlots.length);
-    console.log('All plots data:', JSON.stringify(sharedPlots, null, 2));
-
-    const layersToRemove = ['plots-polygons-fill', 'plots-polygons-outline', 'plots-points', 'plots-labels', 'polygon-center-markers', 'polygon-center-labels'];
-    const sourcesToRemove = ['plots-source', 'polygon-centers'];
-
-    // Remove existing layers
-    layersToRemove.forEach(layerId => {
-      if (map.getLayer(layerId)) {
-        map.removeLayer(layerId);
-      }
-    });
-
-    // Remove existing sources
-    sourcesToRemove.forEach(sourceId => {
-      if (map.getSource(sourceId)) {
-        map.removeSource(sourceId);
-      }
-    });
+    // Cleanup
+    ['plots-polygons-fill', 'plots-polygons-outline', 'plots-points', 'plots-labels', 'polygon-center-markers', 'polygon-center-labels'].forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
+    ['plots-source', 'polygon-centers'].forEach(id => { if (map.getSource(id)) map.removeSource(id); });
 
     const features = [];
     const bounds = new window.mapboxgl.LngLatBounds();
-    let hasPoints = false;
-    let hasPolygons = false;
-
-    sharedPlots.forEach((plot, index) => {
-      console.log(`\n=== Processing Plot ${index + 1}: ${plot.plot_id} ===`);
+    
+    sharedPlots.forEach(plot => {
       let coordinates = [];
-
-      // Method 1: Direct coordinates field
       try {
-        if (plot.coordinates) {
-          const parsed = typeof plot.coordinates === 'string'
-            ? JSON.parse(plot.coordinates)
-            : plot.coordinates;
-          
-          console.log('Parsed coordinates:', parsed);
-          console.log('Coordinates type:', typeof parsed, 'Is array:', Array.isArray(parsed));
-          console.log('Coordinates length:', parsed?.length);
-          
-          if (Array.isArray(parsed)) {
-            // Check if it's a simple array of coordinate pairs [[lng, lat], [lng, lat], ...]
-            if (parsed.length > 0 && Array.isArray(parsed[0]) && typeof parsed[0][0] === 'number') {
-              coordinates = parsed;
-              console.log('Format: Direct array of coordinate pairs');
-            }
-            // Check if it's triple-nested (GeoJSON Polygon format) [[[lng, lat], ...]]
-            else if (parsed.length > 0 && Array.isArray(parsed[0]) && Array.isArray(parsed[0][0])) {
-              coordinates = parsed[0];
-              console.log('Format: Triple-nested (GeoJSON Polygon)');
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing coordinates field:', e);
-      }
-
-      // Method 2: GeoJSON field
-      if (coordinates.length === 0 && plot.geojson) {
-        console.log('Trying geojson field:', plot.geojson);
-        console.log('GeoJSON type:', plot.geojson.type);
-        console.log('GeoJSON coordinates:', plot.geojson.coordinates);
+        const raw = plot.coordinates || plot.geojson?.coordinates;
+        if (typeof raw === 'string') coordinates = JSON.parse(raw);
+        else coordinates = raw;
         
-        if (plot.geojson.type === 'Point') {
-          coordinates = [plot.geojson.coordinates];
-          console.log('Format: GeoJSON Point');
-        } 
-        else if (plot.geojson.type === 'Polygon') {
-          coordinates = plot.geojson.coordinates[0];
-          console.log('Format: GeoJSON Polygon, outer ring');
+        // Normalize coordinate structure
+        if (Array.isArray(coordinates)) {
+            // Handle different nesting levels
+            if (coordinates.length > 0 && typeof coordinates[0][0] === 'number') { /* Point or Line */ }
+            else if (coordinates.length > 0 && Array.isArray(coordinates[0]) && typeof coordinates[0][0][0] === 'number') coordinates = coordinates[0]; // Polygon outer ring
         }
-        else if (plot.geojson.type === 'MultiPolygon') {
-          coordinates = plot.geojson.coordinates[0][0];
-          console.log('Format: GeoJSON MultiPolygon');
-        }
-        else if (Array.isArray(plot.geojson.coordinates)) {
-          if (Array.isArray(plot.geojson.coordinates[0]) && Array.isArray(plot.geojson.coordinates[0][0])) {
-            coordinates = plot.geojson.coordinates[0];
-            console.log('Format: Generic triple-nested array');
-          } else if (Array.isArray(plot.geojson.coordinates[0])) {
-            coordinates = plot.geojson.coordinates;
-            console.log('Format: Generic double-nested array');
-          }
-        }
-      }
+      } catch (e) { return; }
 
-      // Method 3: Individual lat/lng fields
-      if (
-        coordinates.length === 0 &&
-        plot.longitude !== null &&
-        plot.longitude !== undefined &&
-        plot.latitude !== null &&
-        plot.latitude !== undefined
-      ) {
-        coordinates = [[plot.longitude, plot.latitude]];
-        console.log('Format: Individual lat/lng fields');
-      }
+      if (!coordinates || coordinates.length === 0) return;
 
-      console.log('Final coordinates count:', coordinates.length);
-      console.log('First few coordinates:', coordinates.slice(0, 3));
-
-      if (coordinates.length === 0) {
-        console.warn(`❌ SKIPPING Plot ${plot.plot_id} - No valid coordinates found`);
-        console.log('Plot data:', JSON.stringify(plot, null, 2));
-        return;
-      }
-
-      // Validate coordinates
-      const validCoordinates = coordinates.filter(coord => {
-        if (!Array.isArray(coord) || coord.length < 2) {
-          console.warn('Invalid coordinate format:', coord);
-          return false;
-        }
-        const [lng, lat] = coord;
-        if (typeof lng !== 'number' || typeof lat !== 'number') {
-          console.warn('Non-numeric coordinates:', coord);
-          return false;
-        }
-        if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-          console.warn('Coordinates out of range:', coord);
-          return false;
-        }
-        return true;
-      });
-
-      if (validCoordinates.length === 0) {
-        console.warn(`❌ SKIPPING Plot ${plot.plot_id} - No valid coordinates after validation`);
-        return;
-      }
-
-      if (validCoordinates.length !== coordinates.length) {
-        console.warn(`⚠️ Filtered ${coordinates.length - validCoordinates.length} invalid coordinates`);
-      }
-
-      coordinates = validCoordinates;
-
-      // KEY FIX: A polygon needs at least 3 points (forming a closed ring requires 4 with the duplicate)
-      // A single point is just that - one coordinate
-      const isSinglePoint = coordinates.length === 1;
-      const hasDef = plot.deforestation_percentage !== null && plot.deforestation_percentage !== undefined;
-
-      const properties = {
-        plot_id: plot.plot_id || plot.id,
-        plot_name: plot.plot_name || plot.name || 'Unnamed Plot',
-        country: plot.country || 'Unknown',
-        products: (plot.products || plot.commodities || []).join?.(', ') || (plot.commodities || 'None'),
-        area: plot.area || 0,
-        has_deforestation: hasDef,
-        deforestation_percentage: hasDef ? plot.deforestation_percentage : null,
-        deforested_area: hasDef ? plot.deforested_area : null,
-        is_point: isSinglePoint
+      const isSinglePoint = coordinates.length === 1 || (typeof coordinates[0] === 'number'); // Simple heuristic
+      const props = {
+        plot_id: plot.plot_id,
+        plot_name: plot.plot_name || 'Unnamed',
+        country: plot.country,
+        area: plot.area,
+        is_point: isSinglePoint,
+        has_deforestation: plot.deforestation_percentage != null,
+        def_pct: plot.deforestation_percentage,
+        products: Array.isArray(plot.commodities) ? plot.commodities.join(', ') : (plot.commodities || '')
       };
 
       if (isSinglePoint) {
-        hasPoints = true;
-        const [lng, lat] = coordinates[0];
-        console.log(`✅ Adding POINT for ${plot.plot_id} at [${lng}, ${lat}]`);
-        features.push({
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [lng, lat]
-          },
-          properties
-        });
+        const [lng, lat] = (typeof coordinates[0] === 'number') ? coordinates : coordinates[0];
+        
+        // Add Point Feature
+        features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: props });
         bounds.extend([lng, lat]);
       } else {
-        // This is a polygon with multiple points
-        hasPolygons = true;
-        console.log(`✅ Adding POLYGON for ${plot.plot_id} with ${coordinates.length} points`);
+        // Ensure closed loop for Polygon
+        if (coordinates[0][0] !== coordinates[coordinates.length-1][0]) coordinates.push(coordinates[0]);
         
-        // Ensure the polygon is closed (first point = last point)
-        const firstCoord = coordinates[0];
-        const lastCoord = coordinates[coordinates.length - 1];
-        if (firstCoord[0] !== lastCoord[0] || firstCoord[1] !== lastCoord[1]) {
-          console.log('Closing polygon ring');
-          coordinates.push([...firstCoord]);
+        // Add Polygon Feature
+        features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [coordinates] }, properties: props });
+        coordinates.forEach(c => bounds.extend(c));
+
+        // RESTORED LOGIC: Calculate Centroid and Add Point Feature
+        // This ensures every polygon has a visible, clickable point marker
+        let lngSum = 0, latSum = 0;
+        coordinates.forEach(([l, t]) => { lngSum += l; latSum += t; });
+        const centerLng = lngSum / coordinates.length;
+        const centerLat = latSum / coordinates.length;
+
+        features.push({ 
+            type: 'Feature', 
+            geometry: { type: 'Point', coordinates: [centerLng, centerLat] }, 
+            properties: { ...props, is_center: true } // Mark as center if needed for specific styling
+        });
+      }
+    });
+
+    if (features.length === 0) return;
+
+    map.addSource('plots-source', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+
+    // Polygons Layer
+    map.addLayer({
+        id: 'plots-polygons-fill', type: 'fill', source: 'plots-source',
+        filter: ['==', '$type', 'Polygon'], // Only Polygons
+        paint: { 'fill-color': '#4A90E2', 'fill-opacity': 0.15 }
+    });
+    map.addLayer({
+        id: 'plots-polygons-outline', type: 'line', source: 'plots-source',
+        filter: ['==', '$type', 'Polygon'], // Only Polygons
+        paint: { 'line-color': '#1E5BA8', 'line-width': 3, 'line-opacity': 1 }
+    });
+
+    // Points Layer (catches single points AND polygon centers)
+    map.addLayer({
+        id: 'plots-points', type: 'circle', source: 'plots-source',
+        filter: ['==', '$type', 'Point'], // Only Points
+        paint: { 
+            'circle-radius': 8, 
+            'circle-color': '#4A90E2', 
+            'circle-stroke-color': '#1E5BA8', 
+            'circle-stroke-width': 2 
         }
-        
-        features.push({
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [coordinates] // Polygon coordinates must be wrapped in an array
-          },
-          properties
+    });
+
+    // Labels Layer
+    map.addLayer({
+        id: 'plots-labels', type: 'symbol', source: 'plots-source',
+        filter: ['==', '$type', 'Point'], // Attach labels to points
+        layout: { 
+            'text-field': ['get', 'plot_id'], 
+            'text-size': 12, 
+            'text-offset': [0, -1.5], 
+            'text-anchor': 'top' 
+        },
+        paint: { 
+            'text-color': '#ffffff', 
+            'text-halo-color': '#000000', 
+            'text-halo-width': 1 
+        }
+    });
+
+    // Interactions
+    ['plots-polygons-fill', 'plots-points'].forEach(layer => {
+        map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', layer, () => {
+            map.getCanvas().style.cursor = '';
+            popupRef.current?.remove();
+        });
+        map.on('mousemove', layer, (e) => {
+            if(!e.features.length) return;
+            const p = e.features[0].properties;
+            const html = `
+                <div style="font-family:sans-serif; font-size:13px; color:#333">
+                    <strong style="color:#1E5BA8">${p.plot_name}</strong><br/>
+                    ID: ${p.plot_id}<br/>
+                    ${p.area} ha • ${p.country}<br/>
+                    ${p.has_deforestation ? `<strong style="color:#d32f2f">Deforestation: ${Number(p.def_pct).toFixed(1)}%</strong>` : ''}
+                </div>
+            `;
+            popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(map);
         });
         
-        // Add all coordinates to bounds
-        coordinates.forEach(([lng, lat]) => bounds.extend([lng, lat]));
-      }
-    });
-
-    console.log(`\n=== SUMMARY ===`);
-    console.log(`Total features created: ${features.length}`);
-    console.log(`Has points: ${hasPoints}`);
-    console.log(`Has polygons: ${hasPolygons}`);
-    console.log('Features:', JSON.stringify(features, null, 2));
-
-    if (features.length === 0) {
-      console.error('❌ No valid features to draw!');
-      toast.error('No valid plot coordinates found');
-      return;
-    }
-
-    // Add the GeoJSON source
-    map.addSource('plots-source', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features
-      }
-    });
-
-    // Add polygon fill layer - LOW OPACITY
-    map.addLayer({
-      id: 'plots-polygons-fill',
-      type: 'fill',
-      source: 'plots-source',
-      filter: ['!=', ['get', 'is_point'], true],
-      paint: {
-        'fill-color': '#4A90E2', // Blue color
-        'fill-opacity': 0.15 // Very low opacity (15%)
-      }
-    });
-
-    console.log('✅ Polygon fill layer added');
-
-    // Add polygon outline layer - BLUE BORDER
-    map.addLayer({
-      id: 'plots-polygons-outline',
-      type: 'line',
-      source: 'plots-source',
-      filter: ['!=', ['get', 'is_point'], true],
-      paint: {
-        'line-color': '#1E5BA8', // Dark blue border
-        'line-width': 4, // Thick border
-        'line-opacity': 1.0 // Full opacity
-      }
-    });
-
-    console.log('✅ Polygon outline layer added');
-
-    // Add points layer - ALL BLUE
-    map.addLayer({
-      id: 'plots-points',
-      type: 'circle',
-      source: 'plots-source',
-      filter: ['==', ['get', 'is_point'], true],
-      paint: {
-        'circle-radius': 10,
-        'circle-color': '#4A90E2', // Blue color
-        'circle-stroke-color': '#1E5BA8', // Darker blue border
-        'circle-stroke-width': 3,
-        'circle-opacity': 0.9
-      }
-    });
-
-    console.log('✅ Points layer added');
-
-    // ADD CENTER MARKERS FOR POLYGONS to make them visible when zoomed out
-    const polygonCenters = features
-      .filter(f => f.geometry.type === 'Polygon')
-      .map(f => {
-        const coords = f.geometry.coordinates[0];
-        const lngs = coords.map(c => c[0]);
-        const lats = coords.map(c => c[1]);
-        const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-        
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [centerLng, centerLat]
-          },
-          properties: f.properties
-        };
-      });
-
-    if (polygonCenters.length > 0) {
-      map.addSource('polygon-centers', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: polygonCenters
-        }
-      });
-
-      // Add marker for polygon centers (visible when zoomed out) - ALL BLUE
-      map.addLayer({
-        id: 'polygon-center-markers',
-        type: 'circle',
-        source: 'polygon-centers',
-        paint: {
-          'circle-radius': 12,
-          'circle-color': '#4A90E2', // Blue color
-          'circle-stroke-color': '#ffffff', // White border
-          'circle-stroke-width': 3,
-          'circle-opacity': 0.9
-        }
-      });
-
-      console.log('✅ Polygon center markers added:', polygonCenters.length);
-    }
-
-    // Add labels layer for ALL features (both points and polygon centers)
-    map.addLayer({
-      id: 'plots-labels',
-      type: 'symbol',
-      source: 'plots-source',
-      layout: {
-        'text-field': ['get', 'plot_id'], // Use plot_name instead of plot_id
-        'text-size': 14,
-        'text-offset': [0, -2],
-        'text-anchor': 'top'
-      },
-      paint: {
-        'text-color': '#ffffff',
-        'text-halo-color': '#000000',
-        'text-halo-width': 2
-      }
-    });
-
-    console.log('✅ Labels layer added');
-
-    // Add labels for polygon center markers
-    if (polygonCenters.length > 0) {
-      map.addLayer({
-        id: 'polygon-center-labels',
-        type: 'symbol',
-        source: 'polygon-centers',
-        layout: {
-          'text-field': ['get', 'plot_id'], // Use plot_name for polygon centers
-          'text-size': 14,
-          'text-offset': [0, -2],
-          'text-anchor': 'top'
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': '#000000',
-          'text-halo-width': 2
-        }
-      });
-
-      console.log('✅ Polygon center labels added');
-    }
-
-    // Add hover (mousemove) handlers to show popup on hover
-    ['plots-polygons-fill', 'plots-points', 'polygon-center-markers'].forEach(layerId => {
-      map.on('mousemove', layerId, (e) => {
-        if (e.features && e.features.length > 0) {
-          const props = e.features[0].properties;
-          
-          let popupContent = `
-            <div style="font-size:14px; min-width: 200px;">
-              <strong style="color:#2E7D32;font-size:16px">${props.plot_id}</strong><br/>
-              <strong>${props.plot_name}</strong><br/>
-              Country: ${props.country}<br/>
-              Products: ${props.products}<br/>
-              Area: ${props.area} hectares
-          `;
-
-          if (props.has_deforestation) {
-            popupContent += `
-              <br/><span style="color:#D32F2F">
-                Deforestation: ${Number(props.deforestation_percentage).toFixed(1)}%<br/>
-                Deforested Area: ${Number(props.deforested_area).toFixed(2)} ha
-              </span>
-            `;
-          }
-
-          popupContent += '</div>';
-
-          if (popupRef.current) {
-            popupRef.current
-              .setLngLat(e.lngLat)
-              .setHTML(popupContent)
-              .addTo(map);
-          }
-        }
-      });
-
-      map.on('mouseleave', layerId, () => {
-        map.getCanvas().style.cursor = '';
-        if (popupRef.current) {
-          popupRef.current.remove();
-        }
-      });
-
-      // Add click handler to zoom to the plot
-      map.on('click', layerId, (e) => {
-        if (e.features && e.features.length > 0) {
-          const feature = e.features[0];
-          
-          // Close popup on click
-          if (popupRef.current) {
-            popupRef.current.remove();
-          }
-
-          // Find the original feature to get full geometry
-          const plotId = feature.properties.plot_id;
-          const originalFeature = features.find(f => f.properties.plot_id === plotId);
-          
-          if (originalFeature) {
-            const geom = originalFeature.geometry;
+        // Updated: Zoom Logic on Click
+        map.on('click', layer, (e) => {
+            if (!e.features.length) return;
+            const geom = e.features[0].geometry;
             
             if (geom.type === 'Point') {
-              // For points, zoom to the point
-              map.flyTo({
-                center: geom.coordinates,
-                zoom: 15,
-                duration: 1500,
-                essential: true
-              });
-            } else if (geom.type === 'Polygon') {
-              // For polygons, fit to the polygon bounds
-              const polygonBounds = new window.mapboxgl.LngLatBounds();
-              geom.coordinates[0].forEach(coord => {
-                polygonBounds.extend(coord);
-              });
-              
-              map.fitBounds(polygonBounds, {
-                padding: 100,
-                maxZoom: 18,
-                duration: 1500,
-                essential: true
-              });
+                // If point, fly to it directly
+                map.flyTo({ center: geom.coordinates, zoom: 15, duration: 1500 });
+            } else {
+                // If polygon, fit bounds
+                const b = new window.mapboxgl.LngLatBounds();
+                geom.coordinates[0].forEach(c => b.extend(c));
+                map.fitBounds(b, { padding: 100, maxZoom: 16 });
             }
-          }
-        }
-      });
-
-      map.on('mouseenter', layerId, () => {
-        map.getCanvas().style.cursor = 'pointer';
-      });
+        });
     });
 
-    // Fit the map to show all plots
     if (!bounds.isEmpty()) {
-      if (rotationIntervalRef.current) {
-        clearInterval(rotationIntervalRef.current);
-        rotationIntervalRef.current = null;
-      }
-
-      const fitOptions = {
-        padding: {
-          top: 100,
-          bottom: 100,
-          left: 100,
-          right: 100
-        },
-        duration: 2000,
-        essential: true
-      };
-
-      // Adjust zoom based on content type
-      if (hasPoints && !hasPolygons) {
-        // Only points - zoom in more
-        fitOptions.maxZoom = 10;
-      } else if (hasPolygons && !hasPoints) {
-        // Only polygons - allow closer zoom
-        fitOptions.maxZoom = 16;
-      } else {
-        // Mixed content - moderate zoom
-        fitOptions.maxZoom = 14;
-      }
-
-      console.log('Fitting bounds:', bounds, fitOptions);
-      map.fitBounds(bounds, fitOptions);
-      
-      // ZOOM TO FIRST POLYGON after fitting bounds if we have polygons
-      if (hasPolygons && features.length > 0) {
-        setTimeout(() => {
-          const firstPolygon = features.find(f => f.geometry.type === 'Polygon');
-          if (firstPolygon) {
-            const polygonBounds = new window.mapboxgl.LngLatBounds();
-            firstPolygon.geometry.coordinates[0].forEach(coord => {
-              polygonBounds.extend(coord);
-            });
-            console.log('Zooming to first polygon after initial fit');
-            // Uncomment below to auto-zoom to the first polygon
-            // map.fitBounds(polygonBounds, { padding: 50, maxZoom: 16, duration: 1500 });
-          }
-        }, 2500);
-      }
+        if (rotationIntervalRef.current) clearInterval(rotationIntervalRef.current);
+        map.fitBounds(bounds, { padding: 80, maxZoom: 14, duration: 2000 });
     }
-
-    console.log('✅ Plots drawn successfully');
-  };
-  const addGlobalLayers = () => {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-
-    console.log('Adding global layers...');
-
-    if (map.getLayer('tree-cover')) map.removeLayer('tree-cover');
-    if (map.getLayer('deforestation')) map.removeLayer('deforestation');
-    if (map.getSource('tree-cover-source')) map.removeSource('tree-cover-source');
-    if (map.getSource('deforestation-source')) map.removeSource('deforestation-source');
-
-    if (globalTileUrls?.global_tree_cover_url) {
-      map.addSource('tree-cover-source', {
-        type: 'raster',
-        tiles: [globalTileUrls.global_tree_cover_url],
-        tileSize: 256
-      });
-
-      map.addLayer({
-        id: 'tree-cover',
-        type: 'raster',
-        source: 'tree-cover-source',
-        paint: {
-          'raster-opacity': 0.7
-        },
-        layout: {
-          visibility: 'none'
-        }
-      }, 'plots-polygons-fill');
-
-      console.log('Tree cover layer added');
-    }
-
-    if (globalTileUrls?.global_deforestation_url) {
-      map.addSource('deforestation-source', {
-        type: 'raster',
-        tiles: [globalTileUrls.global_deforestation_url],
-        tileSize: 256
-      });
-
-      map.addLayer({
-        id: 'deforestation',
-        type: 'raster',
-        source: 'deforestation-source',
-        paint: {
-          'raster-opacity': 0.8
-        },
-        layout: {
-          visibility: 'none'
-        }
-      }, 'plots-polygons-fill');
-
-      console.log('Deforestation layer added');
-    }
-
-    // Add layer control
-    addLayerControl();
-    console.log('Global layers added with control');
   };
 
-  const addLayerControl = () => {
+  const updateGlobalLayers = () => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Remove existing control if present
-    const existing = document.getElementById('layer-control');
-    if (existing) existing.remove();
+    // Remove existing
+    if (map.getLayer('tree-cover')) map.removeLayer('tree-cover');
+    if (map.getSource('tree-cover-src')) map.removeSource('tree-cover-src');
+    if (map.getLayer('deforestation')) map.removeLayer('deforestation');
+    if (map.getSource('deforestation-src')) map.removeSource('deforestation-src');
 
-    // Create custom layer control
-    const layerControl = document.createElement('div');
-    layerControl.id = 'layer-control';
-    layerControl.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    layerControl.style.cssText = `
-      background: white;
-      padding: 10px;
-      font-family: Arial, sans-serif;
-      font-size: 13px;
-      max-width: 200px;
-    `;
+    if (showTreeCover && globalTileUrls?.global_tree_cover_url) {
+        map.addSource('tree-cover-src', { type: 'raster', tiles: [globalTileUrls.global_tree_cover_url], tileSize: 256 });
+        map.addLayer({ id: 'tree-cover', type: 'raster', source: 'tree-cover-src', paint: { 'raster-opacity': 0.6 } }, 'plots-polygons-fill');
+    }
 
-    layerControl.innerHTML = `
-      <div style="font-weight: bold; margin-bottom: 8px; color: #333;">Map Layers</div>
-      <label style="display: flex; align-items: center; margin-bottom: 6px; cursor: pointer;">
-        <input type="checkbox" id="tree-cover-toggle" style="margin-right: 8px;">
-        <span>🌳 Forest Cover 2000</span>
-      </label>
-      <label style="display: flex; align-items: center; cursor: pointer;">
-        <input type="checkbox" id="deforestation-toggle" style="margin-right: 8px;">
-        <span>🔥 Forest Loss (2021-2024)</span>
-      </label>
-    `;
-
-    // Add toggle functionality
-    const treeCoverToggle = layerControl.querySelector('#tree-cover-toggle');
-    const deforestationToggle = layerControl.querySelector('#deforestation-toggle');
-
-    treeCoverToggle.addEventListener('change', (e) => {
-      const visibility = e.target.checked ? 'visible' : 'none';
-      map.setLayoutProperty('tree-cover', 'visibility', visibility);
-      console.log('Tree cover visibility:', visibility);
-    });
-
-    deforestationToggle.addEventListener('change', (e) => {
-      const visibility = e.target.checked ? 'visible' : 'none';
-      map.setLayoutProperty('deforestation', 'visibility', visibility);
-      console.log('Deforestation visibility:', visibility);
-    });
-
-    // Add to map container
-    mapContainerRef.current.appendChild(layerControl);
-
-    // Position it
-    layerControl.style.position = 'absolute';
-    layerControl.style.top = '10px';
-    layerControl.style.left = '10px';
-    layerControl.style.zIndex = '1';
+    if (showDeforestation && globalTileUrls?.global_deforestation_url) {
+        map.addSource('deforestation-src', { type: 'raster', tiles: [globalTileUrls.global_deforestation_url], tileSize: 256 });
+        map.addLayer({ id: 'deforestation', type: 'raster', source: 'deforestation-src', paint: { 'raster-opacity': 0.8 } }, 'plots-polygons-fill');
+    }
   };
 
-  useEffect(() => {
-    return () => {
-      if (rotationIntervalRef.current) {
-        clearInterval(rotationIntervalRef.current);
-        rotationIntervalRef.current = null;
-      }
-    };
-  }, []);
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" height="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
+  if (loading || !requestInfo) return <Box display="flex" justifyContent="center" p={10}><CircularProgress /></Box>;
 
   const backDestination = locationState?.source === 'risk-dashboard' ? '/risk-dashboard' : '/requests';
   const backLabel = locationState?.source === 'risk-dashboard' ? 'Back to Risk Dashboard' : 'Back to Requests';
 
-  if (!requestInfo) {
-    return (
-      <Box p={3}>
-        <Alert severity="error">Request not found</Alert>
-        <Button onClick={() => navigate(backDestination)} sx={{ mt: 2 }}>
-          {backLabel}
-        </Button>
-      </Box>
-    );
-  }
-
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(backDestination)} sx={{ mr: 2 }}>
-          {backLabel}
-        </Button>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Shared Land Plots - {requestInfo.supplier_name || requestInfo.id}
-        </Typography>
-      </Box>
+    <Fade in={true}>
+      <Box>
+        {/* HEADER */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box>
+                <Button 
+                    startIcon={<ArrowBackIcon />} 
+                    onClick={() => navigate(backDestination)} 
+                    sx={{ mb: 1, color: 'text.secondary', textTransform: 'none' }}
+                >
+                    {backLabel}
+                </Button>
+                <Typography 
+                    variant="h4" fontWeight={800} 
+                    sx={{ background: 'linear-gradient(45deg, #2E3B55 30%, #6a5acd 90%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+                >
+                    Shared Plots: {requestInfo.supplier_name || requestInfo.id}
+                </Typography>
+            </Box>
+        </Box>
 
-      {sharedPlots.length === 0 ? (
-        <Alert severity="info">No land plots have been shared for this request</Alert>
-      ) : (
-        <>
-          <Paper sx={{ height: 600, mb: 3, position: 'relative' }}>
-            <div
-              ref={mapContainerRef}
-              style={{
-                height: '100%',
-                width: '100%',
-                minHeight: '600px',
-                backgroundColor: '#000'
-              }}
-            />
+        {sharedPlots.length === 0 ? (
+            <Alert severity="info">No land plots shared.</Alert>
+        ) : (
+            <>
+                {/* MAP */}
+                <Paper elevation={0} sx={{ height: 600, mb: 3, position: 'relative', borderRadius: 4, border: '1px solid', borderColor: 'divider', overflow: 'hidden', bgcolor: 'rgb(11, 11, 25)' }}>
+                    <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
+                    
+                    {/* Loading Overlay */}
+                    {(!mapReady) && (
+                        <Box position="absolute" top={0} left={0} width="100%" height="100%" display="flex" alignItems="center" justifyContent="center" sx={{ bgcolor: 'rgba(0,0,0,0.7)', color: 'white', zIndex: 10 }}>
+                            <CircularProgress color="inherit" />
+                        </Box>
+                    )}
 
-            {!mapReady && (
-              <Box sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                zIndex: 1000
-              }}>
-                <CircularProgress sx={{ color: '#fff' }} />
-              </Box>
-            )}
-
-            {layersLoading && (
-              <Box sx={{
-                position: 'absolute',
-                top: 10,
-                left: 10,
-                padding: 1.5,
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                borderRadius: 1,
-                zIndex: 1000
-              }}>
-                <Typography variant="body2">Loading Earth Engine layers...</Typography>
-              </Box>
-            )}
-          </Paper>
-
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Plot ID</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Country</TableCell>
-                  <TableCell>Area (ha)</TableCell>
-                  <TableCell>Products</TableCell>
-                  <TableCell>Deforestation</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sharedPlots.map((plot) => {
-                  const hasDef = plot.deforestation_percentage != null;
-
-                  return (
-                    <TableRow key={plot.id}>
-                      <TableCell>{plot.plot_id}</TableCell>
-                      <TableCell>{plot.plot_name}</TableCell>
-                      <TableCell>{plot.country}</TableCell>
-                      <TableCell>{plot.area}</TableCell>
-                      <TableCell>
-                        {Array.isArray(plot.commodities)
-                          ? plot.commodities.join(', ')
-                          : plot.commodities || ''}
-                      </TableCell>
-                      <TableCell>
-                        {hasDef ? (
-                          <Chip
-                            label={`${plot.deforestation_percentage.toFixed(1)}%`}
-                            color={plot.deforestation_percentage > 0 ? 'error' : 'success'}
-                            size="small"
-                          />
-                        ) : (
-                          <Chip label="—" size="small" />
+                    {/* Layer Control */}
+                    <Paper sx={{ position: 'absolute', top: 16, left: 16, p: 2, zIndex: 5, borderRadius: 3, maxWidth: 220 }}>
+                        <Box display="flex" alignItems="center" gap={1} mb={1}>
+                            <LayersIcon fontSize="small" color="primary" />
+                            <Typography variant="subtitle2" fontWeight={700}>Layers</Typography>
+                        </Box>
+                        {layersLoading ? <Typography variant="caption">Loading layers...</Typography> : (
+                            <Box display="flex" flexDirection="column">
+                                <Box display="flex" alignItems="center" mb={0.5}>
+                                    <Checkbox size="small" checked={showTreeCover} onChange={e => setShowTreeCover(e.target.checked)} />
+                                    <Typography variant="body2">🌳 Forest Cover</Typography>
+                                </Box>
+                                <Box display="flex" alignItems="center">
+                                    <Checkbox size="small" checked={showDeforestation} onChange={e => setShowDeforestation(e.target.checked)} />
+                                    <Typography variant="body2">🔥 Deforestation</Typography>
+                                </Box>
+                            </Box>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
-      )}
-    </Box>
+                    </Paper>
+                </Paper>
+
+                {/* TABLE */}
+                <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+                    <TableContainer>
+                        <Table>
+                            <TableHead sx={{ bgcolor: 'background.neutral' }}>
+                                <TableRow>
+                                    <TableCell sx={{ fontWeight: 600, pl: 4 }}>Plot ID</TableCell>
+                                    <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                                    <TableCell sx={{ fontWeight: 600 }}>Country</TableCell>
+                                    <TableCell sx={{ fontWeight: 600 }}>Area (ha)</TableCell>
+                                    <TableCell sx={{ fontWeight: 600 }}>Products</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, pr: 4 }}>Deforestation</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {sharedPlots.map(plot => {
+                                    const hasDef = plot.deforestation_percentage != null;
+                                    return (
+                                        <TableRow key={plot.id || Math.random()} hover>
+                                            <TableCell sx={{ pl: 4, fontWeight: 500 }}>{plot.plot_id}</TableCell>
+                                            <TableCell>{plot.plot_name}</TableCell>
+                                            <TableCell>{plot.country}</TableCell>
+                                            <TableCell>{plot.area}</TableCell>
+                                            <TableCell>
+                                                {(Array.isArray(plot.commodities) ? plot.commodities : (plot.commodities || '').split(','))
+                                                    .filter(Boolean).map((c, i) => <Chip key={i} label={c} size="small" sx={{ mr: 0.5 }} />)
+                                                }
+                                            </TableCell>
+                                            <TableCell sx={{ pr: 4 }}>
+                                                {hasDef ? (
+                                                    <Chip 
+                                                        label={`${plot.deforestation_percentage.toFixed(1)}%`} 
+                                                        color={plot.deforestation_percentage > 0 ? 'error' : 'success'} 
+                                                        size="small" sx={{ fontWeight: 600 }} 
+                                                    />
+                                                ) : <Typography variant="caption" color="text.secondary">N/A</Typography>}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Paper>
+            </>
+        )}
+      </Box>
+    </Fade>
   );
 };
 
