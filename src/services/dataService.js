@@ -23,10 +23,28 @@ const erp = axios.create({
 export const dataService = {
   getSuppliers: async (params = {}) => {
     const { search, limit } = params;
-    const { data } = await API.get('/method/farmportal.api.data.get_suppliers', {
+    const { data } = await API.get('/method/farmportal.api.supplier.get_suppliers', {
       params: { search, limit }
     });
     return unwrap(data) || { suppliers: [] };
+  },
+
+  addSupplier: async (data) => {
+    // data = { name, email, country }
+    const response = await API.post('/method/farmportal.api.supplier.create_supplier_with_user', {
+      name: data.name,
+      email: data.email,
+      country: data.country
+    });
+    return response.data;
+  },  
+  toggleSupplierAccess: async (supplierId, enable) => {
+    // Using 'supplier_name' param to match backend arg, but passing ID value
+    const response = await API.post('/method/farmportal.api.supplier.toggle_supplier_access', {
+      supplier_name: supplierId, 
+      enable: enable
+    });
+    return response.data;
   },
 
   // Use API (already points to /api) and UNWRAP the result

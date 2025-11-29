@@ -10,6 +10,7 @@ import Questionnaires from './pages/Questionnaires';
 // Context
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import PublicRoute from './components/PublicRoute';
 import { DataProvider } from './pages/LandPlots';
 
 // Layout
@@ -20,7 +21,9 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Requests from './pages/Requests';
-// import LandPlots from './pages/LandPlots';
+import AdminLogin from './pages/AdminLogin';
+import AdminRoute from './components/AdminRoute';
+import AdminDashboard from './pages/AdminDashboard';
 import LandPlots, { DataProvider as LandPlotsProvider } from './pages/LandPlots';
 
 import Products from './pages/Products';
@@ -65,9 +68,26 @@ function App() {
         <DataProvider>
           <Router>
             <Routes>
-              <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              
+
+              <Route 
+                path="/login" 
+                element={
+                  <PublicRoute type="user">
+                    <Login />
+                  </PublicRoute>
+                } 
+              />
+
+              <Route 
+                path="/admin/login" 
+                element={
+                  <PublicRoute type="admin">
+                    <AdminLogin />
+                  </PublicRoute>
+                } 
+              />
+
               <Route path="/" element={
                 <ProtectedRoute>
                   <Layout>
@@ -158,7 +178,15 @@ function App() {
                   </Layout>
                 </ProtectedRoute>
               } />
-              
+              <Route 
+                  path="/admin/dashboard" 
+                  element={
+                    <AdminRoute>
+                      <AdminDashboard />
+                    </AdminRoute>
+                  } 
+                />
+              <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Router>
